@@ -1,0 +1,2193 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SNAKE on FIRE">
+<meta name="theme-color" content="#08080f">
+<meta name="format-detection" content="telephone=no">
+<title>SNAKE on FIRE</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<!-- Optional: remove the next two lines for smallest offline build; set USE_FIREBASE=false in <script>. -->
+<script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/11.0.0/firebase-database-compat.js"></script>
+<style>
+  :root{
+    --bg-deep:#08080f;
+    --bg-mid:#12122a;
+    --neon:#7cff7c;
+    --neon-dark:#1a8a1a;
+    --fire-y:#ffd24a;
+    --fire-o:#ff7a1a;
+    --fire-r:#ff2a0a;
+    --text:#e8e8f5;
+    --purple:#b347ff;
+    --cyan:#33d6ff;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{
+    height:100vh;
+    height:100dvh;
+    background:radial-gradient(ellipse at center, var(--bg-mid) 0%, var(--bg-deep) 70%);
+    color:var(--text);
+    font-family:'Press Start 2P','Courier New',monospace;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;
+    -webkit-text-size-adjust:100%;
+    -webkit-tap-highlight-color:transparent;
+    touch-action:none;
+    overscroll-behavior:none;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+  body{
+    padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  /* Aspect-correct, viewport-fitted wrap. Adapts portrait/landscape automatically.
+     Reserves ~46px below for the hint line. */
+  #wrap{
+    position:relative;
+    width:min(96vw, calc((100dvh - 64px) * (768/528)));
+    aspect-ratio:768/528;
+    border:4px solid var(--neon-dark);
+    box-shadow:
+      0 0 50px rgba(124,255,124,0.18),
+      0 0 8px rgba(124,255,124,0.35),
+      inset 0 0 30px rgba(0,0,0,0.7);
+    background:var(--bg-deep);
+    border-radius:6px;
+  }
+  canvas{
+    display:block;
+    width:100%;
+    height:100%;
+    image-rendering:pixelated;
+    image-rendering:crisp-edges;
+    border-radius:2px;
+    touch-action:none;
+  }
+  #scanlines{
+    position:absolute;inset:0;pointer-events:none;
+    background:repeating-linear-gradient(
+      0deg,
+      rgba(0,0,0,0.18) 0px,
+      rgba(0,0,0,0.18) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    mix-blend-mode:multiply;
+    border-radius:2px;
+  }
+  #vignette{
+    position:absolute;inset:0;pointer-events:none;
+    background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.55) 100%);
+    border-radius:2px;
+  }
+  #hint{
+    position:absolute;left:0;right:0;bottom:-30px;
+    text-align:center;font-size:9px;letter-spacing:2px;
+    color:rgba(232,232,245,0.4);
+    pointer-events:none;
+    padding:0 8px;
+  }
+  /* Pause button — only shown during PLAY/PAUSE on touch devices */
+  #pauseBtn{
+    position:absolute;
+    top:8px;right:8px;
+    min-width:56px;height:36px;
+    background:rgba(0,0,0,0.55);
+    color:#9cff9c;
+    border:1px solid rgba(124,255,124,0.55);
+    border-radius:4px;
+    font-family:'Press Start 2P',monospace;
+    font-size:14px;
+    letter-spacing:3px;
+    padding:0 8px;
+    cursor:pointer;
+    -webkit-tap-highlight-color:transparent;
+    user-select:none;-webkit-user-select:none;
+    z-index:10;
+    touch-action:manipulation;
+  }
+  #pauseBtn:active{ background:rgba(124,255,124,0.25); }
+  #pauseBtn[hidden]{ display:none; }
+  /* Hidden text input — drives iOS soft keyboard during NAME state.
+     16px font prevents iOS auto-zoom on focus. */
+  #nameInput{
+    position:fixed;
+    top:50%;left:50%;
+    width:1px;height:1px;
+    opacity:0;
+    border:0;padding:0;margin:0;
+    background:transparent;color:transparent;
+    pointer-events:none;
+    font-size:16px;
+    -webkit-user-select:text;user-select:text;
+    z-index:-1;
+  }
+  @media (max-width:520px){
+    #hint{ font-size:8px; letter-spacing:1px; bottom:-26px; }
+  }
+</style>
+</head>
+<body>
+  <div id="wrap">
+    <canvas id="game" width="768" height="528"></canvas>
+    <div id="scanlines"></div>
+    <div id="vignette"></div>
+    <div id="hint">PFEILE/WASD bewegen   ·   SWIPE auf Touch   ·   ENTER bestaetigen   ·   ESC pause</div>
+  </div>
+  <input id="nameInput" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="done">
+<script>
+"use strict";
+
+// Set false for local-only build (no cloud leaderboard). If false, you may also remove the two gstatic <script> lines in <head>.
+const USE_FIREBASE = true;
+
+// ===== FIREBASE (optional) =====
+const firebaseConfig = {
+  apiKey: "AIzaSyDrfAv7fa8cE33WnzZdYsvtifS80E_-E2A",
+  authDomain: "snake-on-fire.firebaseapp.com",
+  databaseURL: "https://snake-on-fire-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "snake-on-fire",
+  storageBucket: "snake-on-fire.firebasestorage.app",
+  messagingSenderId: "849125273754",
+  appId: "1:849125273754:web:df3d734033de13c5d0af23",
+  measurementId: "G-NRB1PLQEZS"
+};
+let db = null;
+let globalTop10 = [];
+let fbReady = false;
+let lastFbWriteError = '';
+const scoreUploadQueue = [];
+let scoreUploadInFlight = false;
+
+function initFirebase(){
+  if (!USE_FIREBASE || typeof firebase === 'undefined'){
+    console.log('Snake on Fire: Firebase disabled or SDK not loaded.');
+    return;
+  }
+  try {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  } catch (e){
+    lastFbWriteError = 'firebase init failed';
+    console.warn('Firebase init failed', e);
+    return;
+  }
+  db.ref('.info/connected').on('value', (s) => {
+    fbReady = s.val() === true;
+    if (fbReady){
+      console.log('Firebase RTDB connected');
+      lastFbWriteError = '';
+      loadGlobalScores();
+      flushScoreUploadQueue();
+    } else {
+      console.log('Firebase RTDB disconnected');
+    }
+  });
+}
+
+function loadGlobalScores() {
+  if (!db || !fbReady) return;
+  db.ref('highscores').orderByChild('score').limitToLast(10).on('value', (snap) => {
+    const arr = [];
+    snap.forEach((c) => arr.push(c.val()));
+    globalTop10 = arr.reverse();
+    console.log('Global Top 10:', globalTop10);
+  }, (err) => {
+    console.error('highscores read failed', err);
+    lastFbWriteError = (err && err.message) ? err.message : 'read failed';
+  });
+}
+
+function flushScoreUploadQueue(){
+  if (!db || !fbReady || scoreUploadInFlight) return;
+  if (!scoreUploadQueue.length) return;
+  scoreUploadInFlight = true;
+  const { name, score } = scoreUploadQueue.shift();
+  const payload = {
+    name: String(name || '?').slice(0, 24),
+    score: Math.min(9999999, Math.max(0, Number(score) || 0)),
+    date: new Date().toISOString(),
+  };
+  let retryMs = 0;
+  db.ref('highscores').push(payload)
+    .then(() => {
+      console.log('Uploaded score', payload.name, payload.score);
+      lastFbWriteError = '';
+    })
+    .catch((err) => {
+      console.error('highscores write failed', err);
+      lastFbWriteError = (err && err.message) ? err.message : 'write denied';
+      scoreUploadQueue.unshift({ name: payload.name, score: payload.score });
+      retryMs = 5000;
+    })
+    .finally(() => {
+      scoreUploadInFlight = false;
+      if (retryMs) setTimeout(flushScoreUploadQueue, retryMs);
+      else flushScoreUploadQueue();
+    });
+}
+
+function uploadScore(name, score) {
+  if (!USE_FIREBASE || !db) return;
+  scoreUploadQueue.push({ name, score });
+  flushScoreUploadQueue();
+}
+
+initFirebase();
+
+// ====================================================================
+//  SNAKE on FIRE  —  retro pixel HD, 90s vibes
+//  Version 1.3
+// ====================================================================
+const GAME_VERSION = '1.3';
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+const W = canvas.width;
+const H = canvas.height;
+
+const CELL = 24;
+const COLS = 32; // 32 * 24 = 768
+const ROWS = 22; // 22 * 24 = 528
+const HUD_H = 0; // we draw HUD inside playfield top area subtly
+
+const STATES = {
+  INTRO:      'intro',
+  MENU:       'menu',
+  PCOUNT:     'pcount',
+  NAME:       'name',
+  COUNTDOWN:  'countdown',
+  PLAYING:    'playing',
+  PAUSED:     'paused',
+  GAMEOVER:   'gameover',
+  RESULTS:    'results',
+  HIGHSCORE:  'highscore',
+};
+
+let state = STATES.INTRO;
+let stateTime = 0;
+let lastTime = 0;
+
+// menu
+const menuItems = ['NEW GAME', 'HIGHSCORE'];
+let menuSel = 0;
+
+// player setup
+let playerCount = 1;
+let players = []; // [{name, score}]
+let currentPlayer = 0;
+let nameBuf = '';
+let nameIdx = 0;
+
+// game state
+let snake, prevSnake, dir, dirQueue, food, score, foodEaten, tickInterval, tickTimer, alive, particles, ambient;
+let biteX = -1, biteY = -1, shakeTime = 0;
+let frozen = false;
+let bonusFlash = null;   // { points, time }
+let infernoFlash = 0;    // brief screen tint when reaching level 4
+let escalationBanner = null; // {level, time, total}  ESKALATION / MASSIVE / SUPER
+let snakeTrail = [];     // rainbow ghost trail positions (used at lvl 6)
+
+// session-persistent state
+let sessionTable = [];   // [{round, name, score}] all rounds in current session
+let roundNum = 0;        // round counter within current session
+let highscore = loadHs();
+
+function loadHs(){
+  try { return JSON.parse(localStorage.getItem('snakeOnFire_hs') || '[]'); }
+  catch { return []; }
+}
+function saveHs(){
+  try { localStorage.setItem('snakeOnFire_hs', JSON.stringify(highscore.slice(0,10))); }
+  catch {}
+}
+
+// --------------------------------------------------------------------
+//  GAME LOGIC
+// --------------------------------------------------------------------
+
+function resetGame(){
+  snake = [];
+  const sy = Math.floor(ROWS/2);
+  for (let i = 0; i < 4; i++) snake.push({x: 10 - i, y: sy});
+  prevSnake = snake.map(s => ({x:s.x, y:s.y}));
+  dir = {x:1, y:0};
+  dirQueue = [];
+  biteX = -1; biteY = -1; shakeTime = 0;
+  frozen = false;
+  bonusFlash = null;
+  infernoFlash = 0;
+  escalationBanner = null;
+  snakeTrail = [];
+  score = 0;
+  foodEaten = 0;
+  tickInterval = 110;
+  tickTimer = 0;
+  alive = true;
+  particles = [];
+  ambient = [];
+  spawnFood();
+}
+
+function spawnFood(){
+  // determine type for the NEXT food (idx = items eaten + 1)
+  const idx = foodEaten + 1;
+  let type;
+  if (idx % 7 === 0) type = 'ice';                       // 7,14,21,28,...
+  else if (idx > 1 && idx % 7 === 1) type = 'bonus';     // 8,15,22,29,...
+  else type = 'flame';
+  const iceLevel = type === 'ice' ? Math.min(4, Math.floor(idx/7)) : 0;
+
+  // bug fix: never spawn in row 0 (covered by HUD / top frame)
+  // also never on snake
+  let tries = 0;
+  while (tries++ < 500){
+    const x = Math.floor(Math.random()*COLS);
+    const y = 1 + Math.floor(Math.random()*(ROWS-1)); // 1..ROWS-1
+    if (!snake.some(s => s.x===x && s.y===y)){
+      food = {x, y, anim: Math.random()*Math.PI*2, type, idx, iceLevel, spawnTime: performance.now()};
+      return;
+    }
+  }
+  food = {x:0, y:1, anim:0, type, idx, iceLevel, spawnTime: performance.now()};
+}
+
+// Fire escalation level based on total foods eaten:
+// 0 = none, 1 = yellowish (>=10), 2 = orange (>=20), 3 = red (>=30),
+// 4 = blue-red inferno / ESKALATION (>=40),
+// 5 = blue-pulse MASSIVE ESKALATION (>=50),
+// 6 = rainbow SUPER ESKALATION (>=60)
+function fireLevel(){
+  if (foodEaten >= 60) return 6;
+  if (foodEaten >= 50) return 5;
+  if (foodEaten >= 40) return 4;
+  if (foodEaten >= 30) return 3;
+  if (foodEaten >= 20) return 2;
+  if (foodEaten >= 10) return 1;
+  return 0;
+}
+
+function setDir(d){
+  // queue-based: compare to last queued (or current dir if queue empty)
+  // this prevents the "fast 90° + 90° = 180°" insta-bite bug
+  const last = dirQueue.length ? dirQueue[dirQueue.length-1] : dir;
+  if (d.x === -last.x && d.y === -last.y) return; // 180°
+  if (d.x ===  last.x && d.y ===  last.y) return; // duplicate
+  if (dirQueue.length >= 2) return;               // cap buffer
+  dirQueue.push(d);
+}
+
+function tickGame(){
+  if (!alive) return;
+  // consume one direction change per tick
+  if (dirQueue.length){
+    const next = dirQueue.shift();
+    if (!(next.x === -dir.x && next.y === -dir.y)){
+      dir = next;
+    }
+  }
+  const head = snake[0];
+  let nx = head.x + dir.x;
+  let ny = head.y + dir.y;
+  if (nx < 0) nx = COLS - 1;
+  else if (nx >= COLS) nx = 0;
+  // top/bottom wrap WITHIN the playfield (rows 1..ROWS-1) — HUD row 0 is skipped.
+  // Going up from row 1 → re-enter at the bottom (row ROWS-1).
+  // Going down past the bottom → re-enter at the first playable row (row 1).
+  if (ny <= 0)        ny = ROWS - 1;
+  else if (ny >= ROWS) ny = 1;
+
+  // self collision: ignore tail (it will move) — unless food eaten (then tail stays);
+  // food cannot be on a snake segment, so checking up to length-1 is safe in both cases.
+  for (let i = 0; i < snake.length - 1; i++){
+    if (snake[i].x === nx && snake[i].y === ny){
+      alive = false;
+      onDeath(nx, ny);
+      return;
+    }
+  }
+
+  // commit pre-tick snapshot for smooth interpolation BEFORE mutating
+  prevSnake = snake.map(s => ({x:s.x, y:s.y}));
+
+  snake.unshift({x:nx, y:ny});
+
+  if (food && nx === food.x && ny === food.y){
+    const wasBelow40 = foodEaten < 40;
+    const wasBelow50 = foodEaten < 50;
+    const wasBelow60 = foodEaten < 60;
+    foodEaten++;
+    const cx = nx*CELL + CELL/2;
+    const cy = ny*CELL + CELL/2;
+    let pts = 1;
+
+    if (food.type === 'ice'){
+      pts = 1;
+      frozen = true;
+      // icy burst
+      for (let i=0;i<26;i++) addParticle(cx, cy, true, 'ice');
+    } else if (food.type === 'bonus'){
+      // speed bonus: faster collection -> more points
+      const elapsed = (performance.now() - food.spawnTime) / 1000;
+      pts = Math.max(5, Math.round(30 - elapsed * 4));
+      frozen = false;
+      bonusFlash = { points: pts, time: 1500 };
+      // golden burst
+      for (let i=0;i<32;i++) addParticle(cx, cy, true, 0);
+    } else {
+      pts = 1;
+      // pickup burst — colour matches current fire level (after increment)
+      const lvl = fireLevel();
+      for (let i=0;i<14;i++) addParticle(cx, cy, true, lvl);
+    }
+
+    // crossing into level 4 -> brief inferno flash + ESKALATION banner
+    if (wasBelow40 && foodEaten >= 40){
+      infernoFlash = 700;
+      escalationBanner = { level: 4, time: 2600, total: 2600 };
+    }
+    if (wasBelow50 && foodEaten >= 50){
+      escalationBanner = { level: 5, time: 2800, total: 2800 };
+    }
+    if (wasBelow60 && foodEaten >= 60){
+      escalationBanner = { level: 6, time: 3200, total: 3200 };
+    }
+
+    score += pts;
+    tickInterval = Math.max(55, tickInterval - 3);
+    spawnFood();
+  } else {
+    snake.pop();
+  }
+
+  // continuous burning trail — escalates with fire level, suppressed while frozen
+  if (!frozen && snake.length > 0){
+    const lvl = fireLevel();
+    if (lvl > 0){
+      // 1->2, 2->3, 3->4, 4->5, 5->6, 6->7
+      const count = Math.min(7, lvl + 2);
+      for (let i=0;i<count;i++){
+        const seg = snake[Math.floor(Math.random()*snake.length)];
+        addParticle(
+          seg.x*CELL + CELL/2 + (Math.random()-0.5)*CELL*0.8,
+          seg.y*CELL + CELL/2 + (Math.random()-0.5)*CELL*0.8,
+          false, lvl
+        );
+      }
+    }
+    // rainbow tail trail — record interpolated head positions at lvl 6
+    if (lvl >= 6){
+      const h = snake[0];
+      snakeTrail.push({ x: h.x*CELL + CELL/2, y: h.y*CELL + CELL/2, hue: (performance.now()/8) % 360 });
+      if (snakeTrail.length > 28) snakeTrail.shift();
+    } else if (snakeTrail.length){
+      // fade out trail if dropped below lvl 6
+      snakeTrail.shift();
+    }
+  } else if (frozen && snake.length > 0){
+    // gentle frost shimmer
+    if (Math.random() < 0.6){
+      const seg = snake[Math.floor(Math.random()*snake.length)];
+      addParticle(
+        seg.x*CELL + CELL/2 + (Math.random()-0.5)*CELL*0.6,
+        seg.y*CELL + CELL/2 + (Math.random()-0.5)*CELL*0.6,
+        false, 'ice'
+      );
+    }
+  }
+}
+
+function onDeath(nx, ny){
+  // record bite location for the bite animation
+  biteX = nx; biteY = ny;
+  shakeTime = 380;
+  // big death burst at bite point
+  for (let i=0;i<60;i++) addParticle(nx*CELL+CELL/2, ny*CELL+CELL/2, true);
+  if (players[currentPlayer]) players[currentPlayer].score = score;
+  state = STATES.GAMEOVER;
+  stateTime = 0;
+}
+
+function advanceAfterDeath(){
+  if (currentPlayer < players.length - 1){
+    currentPlayer++;
+    startCountdown();
+  } else {
+    // round complete — commit to session leaderboard
+    roundNum++;
+    for (const p of players){
+      sessionTable.push({ round: roundNum, name: p.name, score: p.score });
+    }
+    // commit highscores (all-time, persisted)
+    for (const p of players){
+      highscore.push({name:p.name, score:p.score, date:new Date().toISOString().slice(0,10)});
+      // upload to global Firebase leaderboard
+      uploadScore(p.name, p.score);
+    }
+    highscore.sort((a,b)=>b.score-a.score);
+    highscore = highscore.slice(0,10);
+    saveHs();
+    state = STATES.RESULTS;
+    stateTime = 0;
+  }
+}
+
+function startCountdown(){
+  resetGame();
+  state = STATES.COUNTDOWN;
+  stateTime = 0;
+}
+
+// Restart a fresh round with the SAME player roster — zero scores, keep names.
+function playAgainSameNames(){
+  if (!players.length) return;
+  for (const p of players) p.score = 0;
+  currentPlayer = 0;
+  startCountdown();
+}
+
+// --------------------------------------------------------------------
+//  PARTICLES
+// --------------------------------------------------------------------
+
+// kind: 0|1|2|3|4 (fire levels) or 'ice'
+function addParticle(x, y, burst, kind=0){
+  const isIce = kind === 'ice';
+  particles.push({
+    x, y,
+    vx: (Math.random()-0.5) * (burst ? 4 : 1.4),
+    vy: -Math.random() * (burst ? 2.8 : 1.6) - (isIce ? 0.1 : 0.4),
+    life: 1,
+    decay: 0.018 + Math.random()*0.025,
+    size: 2 + Math.random()*3 + (kind === 4 ? 1.5 : 0),
+    kind,
+    burst,
+  });
+}
+
+function updateParticles(dt){
+  for (let i=particles.length-1;i>=0;i--){
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    // ice particles drift up softly; fire particles fall
+    p.vy += (p.kind === 'ice') ? 0.02 : 0.08;
+    p.vx *= 0.98;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i,1);
+  }
+}
+
+function particleColor(p){
+  const l = Math.max(0, p.life);
+  if (p.kind === 'ice'){
+    const r = Math.floor(140 + 80*l);
+    const g = Math.floor(220 - 40*(1-l));
+    const b = 255;
+    return `rgb(${r},${g},${b})`;
+  }
+  if (p.kind === 6){
+    // SUPER ESKALATION — rainbow particles
+    const hue = (p.x*1.7 + p.y*1.3 + performance.now()/6) % 360;
+    return `hsla(${hue}, 90%, ${50 + 20*l}%, 1)`;
+  }
+  if (p.kind === 5){
+    // MASSIVE ESKALATION — light/dark blue
+    const r = Math.floor(40 + 60*l);
+    const g = Math.floor(140 + 80*l);
+    const b = 255;
+    return `rgb(${r},${g},${b})`;
+  }
+  if (p.kind === 4){
+    // blue-red infernal
+    const r = Math.floor(120 + 135*l);
+    const g = Math.floor(40*l);
+    const b = Math.floor(80 + 175*l);
+    return `rgb(${r},${g},${b})`;
+  }
+  if (p.kind === 3){
+    return `rgb(255,${Math.floor(60*l)},${Math.floor(20*l)})`;
+  }
+  if (p.kind === 2){
+    return `rgb(255,${Math.floor(140*l)},${Math.floor(30*l)})`;
+  }
+  if (p.kind === 1){
+    return `rgb(255,${Math.floor(180+60*l)},${Math.floor(40*l)})`;
+  }
+  // default warm yellow-orange
+  return `rgb(255,${Math.floor(80+140*l)},${Math.floor(20*l)})`;
+}
+
+function drawParticles(){
+  for (const p of particles){
+    const a = Math.max(0, p.life);
+    ctx.globalAlpha = a;
+    ctx.fillStyle = particleColor(p);
+    const s = Math.max(1, Math.floor(p.size * p.life));
+    ctx.fillRect(Math.floor(p.x - s/2), Math.floor(p.y - s/2), s, s);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// --------------------------------------------------------------------
+//  RENDERING — PRIMITIVES
+// --------------------------------------------------------------------
+
+function drawBackground(){
+  // base
+  ctx.fillStyle = '#0a0a16';
+  ctx.fillRect(0,0,W,H);
+  // diagonal subtle stripes (90s vibe)
+  ctx.save();
+  ctx.globalAlpha = 0.05;
+  ctx.fillStyle = '#7cff7c';
+  for (let i = -H; i < W; i += 16){
+    ctx.fillRect(i, 0, 1, H*2);
+  }
+  ctx.restore();
+  // grid
+  ctx.strokeStyle = 'rgba(124,255,124,0.06)';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  for (let x=0;x<=COLS;x++){ ctx.moveTo(x*CELL+0.5,0); ctx.lineTo(x*CELL+0.5,H); }
+  for (let y=0;y<=ROWS;y++){ ctx.moveTo(0,y*CELL+0.5); ctx.lineTo(W,y*CELL+0.5); }
+  ctx.stroke();
+}
+
+function drawBlockPx(px, py, fill, edge, shine){
+  ctx.fillStyle = edge;
+  ctx.fillRect(px+1, py+1, CELL-2, CELL-2);
+  ctx.fillStyle = fill;
+  ctx.fillRect(px+3, py+3, CELL-6, CELL-6);
+  if (shine){
+    ctx.fillStyle = 'rgba(255,255,255,0.22)';
+    ctx.fillRect(px+3, py+3, CELL-6, 2);
+    ctx.fillRect(px+3, py+3, 2, CELL-6);
+  }
+}
+
+// Per-segment colours by fire level / frozen state.
+// Returns {body, edge}.
+function snakeColors(i, len, isHead, now){
+  const tIdx = i / Math.max(1, len);
+
+  if (frozen){
+    const phase = (i*0.3 + now/180) % (Math.PI*2);
+    const sh = Math.sin(phase) * 18;
+    const b = 255;
+    const g = Math.floor(210 - tIdx*40 + sh*0.4);
+    const r = Math.floor(140 + sh - tIdx*30);
+    return {
+      body: isHead ? '#dffcff' : `rgb(${Math.max(80,r)},${Math.max(150,g)},${b})`,
+      edge: '#1a4a78',
+    };
+  }
+
+  const lvl = fireLevel();
+
+  if (lvl === 0){
+    const g = Math.floor(220 - tIdx*70);
+    return { body: isHead ? '#9cff9c' : `rgb(60,${g},60)`, edge: '#0c4a0c' };
+  }
+
+  if (lvl === 1){
+    // yellow-green (warming up)
+    const phase = (i*0.4 + now/140) % (Math.PI*2);
+    const heat = 0.5 + 0.5*Math.sin(phase);
+    const r = Math.floor(140 + 80*heat - 30*tIdx);
+    const g = Math.floor(220 - tIdx*60);
+    const b = Math.floor(40*heat);
+    return { body: `rgb(${r},${g},${b})`, edge: '#3a3a08' };
+  }
+
+  if (lvl === 2){
+    // orange (burning)
+    const phase = (i*0.4 + now/120) % (Math.PI*2);
+    const heat = 0.5 + 0.5*Math.sin(phase);
+    const r = 255;
+    const g = Math.floor(140 + 60*heat - 60*tIdx);
+    const b = Math.floor(20*heat);
+    return {
+      body: `rgb(${r},${Math.max(50,g)},${Math.max(0,b)})`,
+      edge: '#5a2a08',
+    };
+  }
+
+  if (lvl === 3){
+    // red hot (inferno)
+    const phase = (i*0.4 + now/100) % (Math.PI*2);
+    const heat = 0.5 + 0.5*Math.sin(phase);
+    const r = 255;
+    const g = Math.floor(60 + 50*heat - 50*tIdx);
+    const b = Math.floor(15*heat);
+    return {
+      body: `rgb(${r},${Math.max(20,g)},${Math.max(0,b)})`,
+      edge: '#3a0a0a',
+    };
+  }
+
+  if (lvl === 4){
+    // blue-red HELLFIRE
+    const phase = (i*0.5 + now/85) % (Math.PI*2);
+    const cycle = (i*0.32 + now/170) % (Math.PI*2);
+    const blueShift = 0.5 + 0.5*Math.sin(cycle);
+    const heat = 0.5 + 0.5*Math.sin(phase);
+    const r = Math.floor(180 + 75*heat - blueShift*70);
+    const g = Math.floor(40*heat);
+    const b = Math.floor(80 + 175*blueShift);
+    return {
+      body: `rgb(${Math.max(60,r)},${g},${b})`,
+      edge: '#2a0a3a',
+    };
+  }
+
+  if (lvl === 5){
+    // MASSIVE ESKALATION — pulsing dark/light blues
+    const phase = (i*0.45 + now/95) % (Math.PI*2);
+    const slow  = (now/420) % (Math.PI*2);
+    const heat = 0.5 + 0.5*Math.sin(phase);
+    const pulse = 0.5 + 0.5*Math.sin(slow);
+    const r = Math.floor(20 + 60*pulse);
+    const g = Math.floor(120 + 100*heat - tIdx*40);
+    const b = Math.floor(200 + 55*pulse);
+    return {
+      body: isHead ? `rgb(${Math.min(255,r+60)},${Math.min(255,g+40)},255)`
+                    : `rgb(${r},${Math.max(60,g)},${Math.min(255,b)})`,
+      edge: '#0a1a4a',
+    };
+  }
+
+  // lvl 6 — SUPER ESKALATION — rainbow gradient body
+  // each segment gets a hue offset, slowly shifting over time
+  const hue = (i * 22 + now/8) % 360;
+  const sat = 92;
+  const light = isHead ? 70 : 55;
+  // simple HSL → CSS string
+  return {
+    body: `hsl(${hue}, ${sat}%, ${light}%)`,
+    edge: `hsl(${(hue+200)%360}, 60%, 18%)`,
+  };
+}
+
+// Smooth-motion render: each segment lerps from its previous-tick position
+// to its current cell using progress = tickTimer / tickInterval.
+function drawSnake(){
+  const now = performance.now();
+  const progress = (alive && state === STATES.PLAYING)
+    ? Math.min(1, tickTimer / tickInterval)
+    : 1;
+
+  // SUPER ESKALATION — rainbow trail rendered BEHIND snake
+  if (snakeTrail.length > 0){
+    ctx.save();
+    for (let i = 0; i < snakeTrail.length; i++){
+      const t = snakeTrail[i];
+      const ageFrac = i / snakeTrail.length;   // 0 = oldest, 1 = newest
+      const alpha = Math.pow(ageFrac, 1.2) * 0.55;
+      const radius = 4 + ageFrac * 9;
+      ctx.globalAlpha = alpha;
+      const hue = (t.hue + now/8) % 360;
+      ctx.fillStyle = `hsl(${hue}, 95%, 60%)`;
+      ctx.beginPath();
+      ctx.arc(t.x, t.y, radius, 0, Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+
+  for (let i = snake.length - 1; i >= 0; i--){
+    const cur  = snake[i];
+    const prev = (prevSnake && i < prevSnake.length) ? prevSnake[i] : cur;
+
+    const dx = cur.x - prev.x;
+    const dy = cur.y - prev.y;
+    const wrapped = Math.abs(dx) > 1 || Math.abs(dy) > 1;
+
+    let fx, fy;
+    if (wrapped){
+      fx = cur.x; fy = cur.y;
+    } else {
+      fx = prev.x + dx * progress;
+      fy = prev.y + dy * progress;
+    }
+    const px = fx * CELL;
+    const py = fy * CELL;
+
+    const isHead = i === 0;
+    const { body, edge } = snakeColors(i, snake.length, isHead, now);
+    drawBlockPx(px, py, body, edge, true);
+    if (isHead) drawSnakeEyesPx(px, py, dir);
+  }
+}
+
+function drawSnakeEyesPx(px, py, d){
+  ctx.fillStyle = '#000';
+  let a, b;
+  if (d.x === 1){ a={x:CELL-9,y:6}; b={x:CELL-9,y:CELL-10}; }
+  else if (d.x === -1){ a={x:5,y:6}; b={x:5,y:CELL-10}; }
+  else if (d.y === -1){ a={x:6,y:5}; b={x:CELL-10,y:5}; }
+  else { a={x:6,y:CELL-9}; b={x:CELL-10,y:CELL-9}; }
+  ctx.fillRect(px+a.x, py+a.y, 4, 4);
+  ctx.fillRect(px+b.x, py+b.y, 4, 4);
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(px+a.x, py+a.y, 1, 1);
+  ctx.fillRect(px+b.x, py+b.y, 1, 1);
+}
+
+function drawFood(){
+  if (!food) return;
+  food.anim += 0.18;
+  if (food.type === 'ice')        drawIceCrystal(food);
+  else if (food.type === 'bonus') drawBonusFlame(food);
+  else                            drawFlame(food);
+}
+
+function drawFlame(f){
+  const cx = f.x*CELL + CELL/2;
+  const cy = f.y*CELL + CELL/2;
+  const flick = Math.sin(f.anim)*0.18 + 1;
+
+  const grd = ctx.createRadialGradient(cx, cy, 1, cx, cy, CELL*1.1);
+  grd.addColorStop(0,'rgba(255,200,80,0.55)');
+  grd.addColorStop(0.45,'rgba(255,90,20,0.22)');
+  grd.addColorStop(1,'rgba(255,40,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(f.x*CELL - CELL, f.y*CELL - CELL, CELL*3, CELL*3);
+
+  const r = (CELL/2 - 4) * flick;
+  ctx.fillStyle = '#ff2a0a';
+  ctx.beginPath(); ctx.ellipse(cx, cy+2, r*0.8, r*1.0, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ff8a2a';
+  ctx.beginPath(); ctx.ellipse(cx, cy, r*0.55, r*0.75, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ffd24a';
+  ctx.beginPath(); ctx.ellipse(cx-1, cy+2, r*0.28, r*0.42, 0, 0, Math.PI*2); ctx.fill();
+
+  if (Math.random() < 0.6){
+    addParticle(cx + (Math.random()-0.5)*CELL*0.4, cy - 2, false, 0);
+  }
+}
+
+function drawBonusFlame(f){
+  const cx = f.x*CELL + CELL/2;
+  const cy = f.y*CELL + CELL/2;
+  const t = performance.now();
+  const flick = Math.sin(f.anim)*0.18 + 1;
+
+  // wide golden glow
+  const grd = ctx.createRadialGradient(cx, cy, 1, cx, cy, CELL*1.3);
+  grd.addColorStop(0,'rgba(255,240,140,0.9)');
+  grd.addColorStop(0.4,'rgba(255,180,40,0.45)');
+  grd.addColorStop(1,'rgba(255,80,0,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(f.x*CELL - CELL, f.y*CELL - CELL, CELL*3, CELL*3);
+
+  // pulsing golden ring (urgency cue)
+  const ringR = CELL/2 + 2 + Math.sin(t/140)*3;
+  ctx.strokeStyle = `rgba(255,220,80,${0.55 + 0.35*Math.sin(t/180)})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(cx, cy, ringR, 0, Math.PI*2); ctx.stroke();
+  // second ring
+  const ringR2 = CELL/2 + 6 + Math.sin(t/140 + 1.2)*3;
+  ctx.strokeStyle = `rgba(255,220,80,${0.25 + 0.2*Math.sin(t/180 + 1)})`;
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, ringR2, 0, Math.PI*2); ctx.stroke();
+
+  // flame body, brighter / golden core
+  const r = (CELL/2 - 3) * flick;
+  ctx.fillStyle = '#ff7a1a';
+  ctx.beginPath(); ctx.ellipse(cx, cy+2, r*0.85, r*1.05, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#ffd24a';
+  ctx.beginPath(); ctx.ellipse(cx, cy, r*0.6, r*0.8, 0, 0, Math.PI*2); ctx.fill();
+  ctx.fillStyle = '#fff8d8';
+  ctx.beginPath(); ctx.ellipse(cx-1, cy+1, r*0.3, r*0.42, 0, 0, Math.PI*2); ctx.fill();
+
+  // sparkles
+  if (Math.random() < 0.8){
+    addParticle(cx + (Math.random()-0.5)*CELL*0.7, cy - 3, false, 0);
+  }
+}
+
+function drawIceCrystal(f){
+  const cx = f.x*CELL + CELL/2;
+  const cy = f.y*CELL + CELL/2;
+  const t = performance.now();
+  const flick = Math.sin(t/200)*0.12 + 1;
+  const lvl = f.iceLevel || 1;
+
+  // outer glow (cyan)
+  const grd = ctx.createRadialGradient(cx, cy, 1, cx, cy, CELL*1.2);
+  grd.addColorStop(0,'rgba(160,240,255,0.6)');
+  grd.addColorStop(0.5,'rgba(80,180,255,0.25)');
+  grd.addColorStop(1,'rgba(0,80,200,0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(f.x*CELL - CELL, f.y*CELL - CELL, CELL*3, CELL*3);
+
+  const r = (CELL/2 - 4) * flick;
+
+  ctx.save();
+  ctx.translate(cx, cy);
+  ctx.rotate(t/2200);
+
+  // outer diamond — deep blue
+  ctx.fillStyle = '#1a78c0';
+  ctx.beginPath();
+  ctx.moveTo(0, -r); ctx.lineTo(r*0.7, 0);
+  ctx.lineTo(0, r);  ctx.lineTo(-r*0.7, 0);
+  ctx.closePath(); ctx.fill();
+
+  // mid — turquoise
+  ctx.fillStyle = '#3acfff';
+  ctx.beginPath();
+  ctx.moveTo(0, -r*0.7); ctx.lineTo(r*0.5, 0);
+  ctx.lineTo(0, r*0.7);  ctx.lineTo(-r*0.5, 0);
+  ctx.closePath(); ctx.fill();
+
+  // inner core — icy white
+  ctx.fillStyle = '#dffcff';
+  ctx.beginPath();
+  ctx.moveTo(0, -r*0.4); ctx.lineTo(r*0.25, 0);
+  ctx.lineTo(0, r*0.4);  ctx.lineTo(-r*0.25, 0);
+  ctx.closePath(); ctx.fill();
+
+  // shine pip
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(-1, -r*0.3, 2, 2);
+
+  // evolution per ice level (7 -> 14 -> 21 -> 28+)
+  if (lvl >= 2){
+    ctx.fillStyle = '#3acfff';
+    ctx.fillRect(-r*1.05, -2, 4, 4);
+    ctx.fillRect( r*1.05-4, -2, 4, 4);
+  }
+  if (lvl >= 3){
+    ctx.fillStyle = '#3acfff';
+    ctx.fillRect(-2, -r*1.05, 4, 4);
+    ctx.fillRect(-2,  r*1.05-4, 4, 4);
+    // small orbiting shards
+    ctx.fillStyle = '#dffcff';
+    const orbit = r*1.25;
+    const ang = t/300;
+    ctx.fillRect(Math.cos(ang)*orbit-1,    Math.sin(ang)*orbit-1, 2, 2);
+    ctx.fillRect(Math.cos(ang+2.1)*orbit-1, Math.sin(ang+2.1)*orbit-1, 2, 2);
+  }
+  if (lvl >= 4){
+    // snowflake spikes (6-fold)
+    ctx.fillStyle = '#dffcff';
+    for (let a=0; a<6; a++){
+      ctx.save();
+      ctx.rotate(a * Math.PI/3);
+      ctx.fillRect(-1, -r*1.35, 2, 5);
+      ctx.fillRect(-2, -r*1.45, 4, 2);
+      ctx.restore();
+    }
+  }
+
+  ctx.restore();
+
+  // ambient frost particles
+  if (Math.random() < 0.55){
+    addParticle(cx + (Math.random()-0.5)*CELL*0.7, cy + (Math.random()-0.5)*CELL*0.5, false, 'ice');
+  }
+}
+
+function drawHUD(){
+  // top dim bar
+  ctx.fillStyle = 'rgba(0,0,0,0.45)';
+  ctx.fillRect(0, 0, W, 28);
+  ctx.fillStyle = 'rgba(124,255,124,0.25)';
+  ctx.fillRect(0, 28, W, 1);
+
+  // single 10px line — everything fits on one row, symmetrically spaced
+  ctx.font = '10px "Press Start 2P", monospace';
+  ctx.textBaseline = 'middle';
+
+  // LEFT: player name
+  ctx.textAlign = 'left';
+  const p = players[currentPlayer];
+  ctx.fillStyle = '#9cff9c';
+  ctx.fillText('P'+(currentPlayer+1)+' '+(p?p.name.toUpperCase():'PLAYER'), 10, 14);
+
+  // RIGHT: items + score (anchored to right edge, tight spacing)
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#fff';
+  ctx.fillText('SCORE '+String(score).padStart(4,'0'), W - 10, 14);
+  ctx.fillStyle = '#ffd24a';
+  ctx.fillText('ITEMS '+String(foodEaten).padStart(3,'0'), W - 130, 14);
+
+  // CENTER: level + status (slightly smaller so it never overlaps the right block)
+  ctx.font = '9px "Press Start 2P", monospace';
+  ctx.textAlign = 'center';
+  if (frozen){
+    const fl = (Math.sin(performance.now()/180)+1)/2;
+    ctx.globalAlpha = 0.65 + 0.35*fl;
+    ctx.fillStyle = '#7cdfff';
+    ctx.fillText('** FROZEN - thaw on next flame **', W/2, 14);
+    ctx.globalAlpha = 1;
+  } else {
+    // 1-indexed display level: 1=green, 2=yellow, 3=orange, 4=red,
+    // 5=blue-purple HELLFIRE, 6=blue MASSIVE, 7=rainbow SUPER
+    const lvl = fireLevel();         // internal 0..6
+    const displayLvl = lvl + 1;      // shown to player 1..7
+    const colors = ['#7cff7c', '#ffea4a', '#ff8a2a', '#ff3a1a', '#c47cff', '#5aaaff', null];
+    const labels = ['', 'BLAZING', 'BURNING', 'INFERNO', 'HELLFIRE', 'MASSIVE', 'SUPER'];
+
+    let color;
+    if (displayLvl === 7){
+      const hue = (performance.now()/8) % 360;
+      color = `hsl(${hue}, 95%, 65%)`;
+    } else {
+      color = colors[lvl];
+    }
+
+    const fl = (Math.sin(performance.now()/110)+1)/2;
+    ctx.globalAlpha = displayLvl === 1 ? 0.95 : (0.7 + 0.3*fl);
+    ctx.fillStyle = color;
+
+    let msg;
+    if (lvl === 0){
+      msg = 'LVL 1  ' + foodEaten + '/10 TO IGNITE';
+    } else {
+      msg = 'LVL ' + displayLvl + '  ** ' + labels[lvl] + ' **';
+    }
+    ctx.fillText(msg, W/2, 14);
+    ctx.globalAlpha = 1;
+  }
+  // restore default font for any later HUD-internal calls
+  ctx.font = '10px "Press Start 2P", monospace';
+
+  // subtle in-game branding at bottom corner
+  ctx.textAlign = 'right';
+  ctx.font = '6px "Press Start 2P", monospace';
+  ctx.fillStyle = 'rgba(255,140,60,0.28)';
+  ctx.fillText('FEUERTONNEN_PRODUCTIONS  v'+GAME_VERSION, W - 6, H - 6);
+  ctx.font = '12px "Press Start 2P", monospace';
+}
+
+// --------------------------------------------------------------------
+//  FIRE BARREL LOGO  (pixel art, animated)
+//  drawn at (cx, cy) = top-left of bbox; U = pixel unit (chunky size)
+//  logical bbox is ~30 wide x 32 tall (so 30*U x 32*U on screen)
+// --------------------------------------------------------------------
+
+function drawFireBarrel(cx, cy, U){
+  const px = (x, y, w, h, c) => {
+    ctx.fillStyle = c;
+    ctx.fillRect(Math.floor(cx + x*U), Math.floor(cy + y*U),
+                 Math.ceil(w*U), Math.ceil(h*U));
+  };
+  // animation flicker
+  const t = performance.now() / 110;
+  const f1 = Math.round(Math.sin(t) * 1.2);
+  const f2 = Math.round(Math.sin(t*1.4 + 1.3) * 1.2);
+  const f3 = Math.round(Math.sin(t*0.7 + 2.1) * 1.0);
+
+  // barrel position within bbox
+  const bx = 4, by = 18, bw = 22, bh = 12;
+
+  // ground shadow
+  px(bx-2, by+bh,   bw+4, 1, 'rgba(0,0,0,0.6)');
+  px(bx-1, by+bh+1, bw+2, 1, 'rgba(0,0,0,0.35)');
+
+  // barrel body — chunky pixel cylinder (front face)
+  px(bx,        by,   bw,   bh,   '#2a201a');                 // base
+  px(bx+1,      by+1, 2,    bh-2, '#181210');                 // left shade
+  px(bx+bw-3,   by+1, 2,    bh-2, '#181210');                 // right shade
+  px(bx+3,      by+1, bw-6, bh-2, '#3c2e24');                 // mid lighter
+  px(bx+5,      by+2, bw-10,1,    '#5a4634');                 // top highlight band
+  // hoops (top + bottom bands)
+  px(bx,   by+1,    bw, 1, '#0a0805');
+  px(bx,   by+bh-2, bw, 1, '#0a0805');
+  // rivets
+  for (let i=0;i<4;i++){
+    px(bx+3+i*5, by+1,    1, 1, '#8a7458');
+    px(bx+3+i*5, by+bh-2, 1, 1, '#8a7458');
+  }
+  // rust patches
+  px(bx+2,    by+5, 2, 2, '#6a3a1a');
+  px(bx+bw-4, by+8, 2, 2, '#6a3a1a');
+  px(bx+9,    by+9, 2, 1, '#5a2a10');
+
+  // top opening — fiery rim
+  px(bx,     by-1, bw,    1, '#1a1410');   // back rim
+  px(bx+1,   by,   bw-2,  1, '#ff7a1a');   // glow
+  px(bx+2,   by,   bw-4,  1, '#ffd24a');   // hot core
+
+  // === FLAMES (red base, orange mid, yellow inner, wisps) ===
+  // red base
+  px(bx+2,   by-2, bw-4,  2, '#ff2a0a');
+  px(bx+3,   by-4, bw-6,  2, '#ff2a0a');
+  px(bx+5,   by-7+f1, bw-10, 3, '#ff2a0a');
+  // orange
+  px(bx+4,   by-3, bw-8,  2, '#ff7a1a');
+  px(bx+6,   by-6+f1, bw-12, 3, '#ff7a1a');
+  px(bx+8,   by-9+f2, bw-16, 3, '#ff7a1a');
+  px(bx+10,  by-12+f1,bw-20, 3, '#ff7a1a');
+  // yellow inner
+  px(bx+6,   by-5+f2, bw-12, 2, '#ffd24a');
+  px(bx+8,   by-8+f1, bw-16, 2, '#ffd24a');
+  px(bx+11,  by-11+f2,bw-22, 2, '#ffd24a');
+  px(bx+12,  by-14+f1,2,     2, '#ffd24a');
+  // wisp tip
+  px(bx+12,  by-16+f3,2, 1, '#ff7a1a');
+  px(bx+13,  by-17+f3,1, 1, '#ffd24a');
+  // sparks
+  px(bx+1,    by-7+f2, 1, 1, '#ffd24a');
+  px(bx+bw-2, by-9+f1, 1, 1, '#ffd24a');
+  px(bx+3,    by-11+f3,1, 1, '#ff7a1a');
+  px(bx+bw-4, by-12+f2,1, 1, '#ff7a1a');
+
+  // === SNAKE — coiled in the barrel, head emerging through flames ===
+  // body coil visible across the rim (left + right peeking out)
+  px(bx+5,  by-1, 4, 2, '#0c4a0c');
+  px(bx+6,  by-1, 3, 1, '#1a8a1a');
+  px(bx+5,  by,   1, 1, '#7cff7c');
+  px(bx+15, by-1, 5, 2, '#0c4a0c');
+  px(bx+16, by-1, 3, 1, '#1a8a1a');
+  px(bx+19, by,   1, 1, '#7cff7c');
+  // mid coil curving up
+  px(bx+10, by-3+f1, 3, 2, '#0c4a0c');
+  px(bx+11, by-3+f1, 2, 1, '#1a8a1a');
+
+  // head emerging through the flame core
+  const hx = bx + 12, hy = by - 9 + f1;
+  px(hx,   hy,   4, 4, '#0c4a0c'); // outline
+  px(hx+1, hy,   3, 3, '#1a8a1a'); // body
+  px(hx+1, hy,   2, 1, '#7cff7c'); // top highlight
+  px(hx+1, hy+2, 1, 1, '#000');    // eye L
+  px(hx+3, hy+2, 1, 1, '#000');    // eye R
+  // tongue flick
+  if (Math.sin(t*0.4) > 0.3){
+    px(hx+2, hy-1, 1, 1, '#ff2a0a');
+  }
+}
+
+// --------------------------------------------------------------------
+//  TEXT HELPERS
+// --------------------------------------------------------------------
+
+function drawText(text, x, y, opts={}){
+  const size = opts.size || 14;
+  const color = opts.color || '#e8e8f5';
+  const align = opts.align || 'center';
+  const shadow = opts.shadow;
+  ctx.font = size+'px "Press Start 2P", monospace';
+  ctx.textAlign = align;
+  ctx.textBaseline = 'middle';
+  if (shadow){
+    ctx.fillStyle = shadow;
+    ctx.fillText(text, x+2, y+3);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
+}
+
+function pulseAlpha(speed=4){
+  return 0.55 + 0.45 * Math.sin(performance.now()/1000 * speed);
+}
+
+// --------------------------------------------------------------------
+//  SCENE: INTRO
+// --------------------------------------------------------------------
+
+function drawIntro(){
+  drawBackground();
+  const t = stateTime/1000;
+
+  // SNAKE on FIRE
+  // we render parts to allow "FIRE" to ignite separately
+  const titleY = H/2 - 30;
+
+  // measure
+  ctx.font = '40px "Press Start 2P", monospace';
+  const wSnake = ctx.measureText('SNAKE').width;
+  ctx.font = '16px "Press Start 2P", monospace';
+  const wOn = ctx.measureText('on').width;
+  ctx.font = '40px "Press Start 2P", monospace';
+  const wFire = ctx.measureText('FIRE').width;
+
+  const gap = 18;
+  const totalW = wSnake + gap + wOn + gap + wFire;
+  let x = W/2 - totalW/2;
+
+  // SNAKE
+  ctx.globalAlpha = Math.min(1, t*1.3);
+  drawText('SNAKE', x + wSnake/2, titleY, {size:40, color:'#9cff9c', shadow:'#1a8a1a'});
+  x += wSnake + gap;
+
+  // on
+  ctx.globalAlpha = Math.min(1, Math.max(0, (t-0.4)*1.5));
+  drawText('on', x + wOn/2, titleY-4, {size:16, color:'#e8e8f5'});
+  x += wOn + gap;
+
+  // FIRE — ignites at t > 1.0
+  if (t > 1.0){
+    const fa = Math.min(1, (t-1.0)*1.3);
+    ctx.globalAlpha = fa;
+    ctx.shadowColor = '#ff7a1a';
+    ctx.shadowBlur = 18 + Math.sin(t*6)*6;
+    drawText('FIRE', x + wFire/2, titleY, {size:40, color:'#ffd24a', shadow:'#ff2a0a'});
+    ctx.shadowBlur = 0;
+    // emit flames around FIRE
+    if (Math.random() < 0.7){
+      addParticle(x + Math.random()*wFire, titleY + (Math.random()-0.5)*30, false);
+    }
+  }
+  ctx.globalAlpha = 1;
+
+  // subtitle
+  if (t > 2.4){
+    if (Math.sin(t*4) > 0){
+      drawText('PRESS  ENTER  TO  START', W/2, H/2 + 70, {size:12, color:'#e8e8f5'});
+    }
+    drawText('A  RETRO  SNAKE  EXPERIENCE  -  90s  REMASTERED', W/2, H - 62, {size:8, color:'rgba(232,232,245,0.45)'});
+    drawText('a  FEUERTONNEN_PRODUCTIONS  joint', W/2, H - 42, {size:8, color:'rgba(255,140,60,0.55)'});
+    drawText('VERSION  '+GAME_VERSION, W/2, H - 22, {size:8, color:'rgba(255,210,74,0.7)'});
+  }
+
+  drawParticles();
+}
+
+// --------------------------------------------------------------------
+//  SCENE: MENU
+// --------------------------------------------------------------------
+
+function drawMenu(){
+  drawBackground();
+  drawTitleSmall();
+
+  const startY = H/2 + 10;
+  for (let i=0;i<menuItems.length;i++){
+    const sel = i === menuSel;
+    const y = startY + i*42;
+    if (sel){
+      ctx.fillStyle = 'rgba(124,255,124,0.14)';
+      ctx.fillRect(W/2-160, y-16, 320, 32);
+      drawText('> '+menuItems[i]+' <', W/2, y, {size:14, color:'#9cff9c', shadow:'#1a8a1a'});
+    } else {
+      drawText(menuItems[i], W/2, y, {size:14, color:'rgba(232,232,245,0.7)'});
+    }
+  }
+
+  drawText('UP / DOWN   to   choose      ENTER   to   confirm', W/2, H - 44, {size:8, color:'rgba(232,232,245,0.4)'});
+  drawText('FEUERTONNEN_PRODUCTIONS', W/2, H - 22, {size:7, color:'rgba(255,140,60,0.45)'});
+
+  // tiny mascot logo in the corner
+  drawFireBarrel(20, H - 92, 2);
+}
+
+function drawTitleSmall(){
+  const y = 80;
+  ctx.font = '28px "Press Start 2P", monospace';
+  const wSnake = ctx.measureText('SNAKE').width;
+  ctx.font = '12px "Press Start 2P", monospace';
+  const wOn = ctx.measureText('on').width;
+  ctx.font = '28px "Press Start 2P", monospace';
+  const wFire = ctx.measureText('FIRE').width;
+  const gap = 14;
+  const total = wSnake + gap + wOn + gap + wFire;
+  let x = W/2 - total/2;
+  drawText('SNAKE', x + wSnake/2, y, {size:28, color:'#9cff9c', shadow:'#1a8a1a'});
+  x += wSnake + gap;
+  drawText('on', x + wOn/2, y-2, {size:12, color:'#e8e8f5'});
+  x += wOn + gap;
+  ctx.shadowColor = '#ff7a1a';
+  ctx.shadowBlur = 12 + Math.sin(performance.now()/200)*4;
+  drawText('FIRE', x + wFire/2, y, {size:28, color:'#ffd24a', shadow:'#ff2a0a'});
+  ctx.shadowBlur = 0;
+}
+
+// --------------------------------------------------------------------
+//  SCENE: PLAYER COUNT
+// --------------------------------------------------------------------
+
+function drawPCount(){
+  drawBackground();
+  drawTitleSmall();
+  drawText('HOW MANY PLAYERS?', W/2, H/2 - 30, {size:14, color:'#e8e8f5'});
+
+  // 1-4 selector
+  const total = 4;
+  const sw = 60, gap = 14;
+  const startX = W/2 - (total*sw + (total-1)*gap)/2;
+  for (let i=0;i<total;i++){
+    const n = i+1;
+    const x = startX + i*(sw+gap);
+    const y = H/2 + 10;
+    const sel = playerCount === n;
+    ctx.strokeStyle = sel ? '#9cff9c' : 'rgba(232,232,245,0.3)';
+    ctx.lineWidth = sel ? 3 : 1;
+    ctx.strokeRect(x, y, sw, sw);
+    if (sel){
+      ctx.fillStyle = 'rgba(124,255,124,0.12)';
+      ctx.fillRect(x, y, sw, sw);
+    }
+    drawText(String(n), x+sw/2, y+sw/2, {size:24, color: sel?'#9cff9c':'#e8e8f5'});
+  }
+  drawText('LEFT / RIGHT      ENTER  to  confirm      ESC  back', W/2, H - 30, {size:8, color:'rgba(232,232,245,0.4)'});
+}
+
+// --------------------------------------------------------------------
+//  SCENE: NAME ENTRY
+// --------------------------------------------------------------------
+
+function drawName(){
+  drawBackground();
+  drawTitleSmall();
+  drawText('PLAYER ' + (nameIdx+1) + ' — ENTER NAME', W/2, H/2 - 40, {size:14, color:'#e8e8f5'});
+
+  const display = nameBuf.toUpperCase().padEnd(12, '_').slice(0,12);
+  // boxes
+  const boxSize = 34, gap = 5;
+  const total = 12;
+  const startX = W/2 - (total*boxSize + (total-1)*gap)/2;
+  for (let i=0;i<total;i++){
+    const x = startX + i*(boxSize+gap);
+    const y = H/2;
+    const ch = display[i];
+    const active = i === nameBuf.length;
+    ctx.strokeStyle = active ? '#9cff9c' : 'rgba(232,232,245,0.25)';
+    ctx.lineWidth = active ? 2 : 1;
+    ctx.strokeRect(x, y, boxSize, boxSize);
+    if (ch !== '_'){
+      drawText(ch, x+boxSize/2, y+boxSize/2, {size:18, color:'#e8e8f5'});
+    } else if (active && Math.sin(performance.now()/200) > 0){
+      drawText('_', x+boxSize/2, y+boxSize/2+4, {size:18, color:'#9cff9c'});
+    }
+  }
+
+  drawText('TYPE NAME (1-12 LETTERS)   ENTER to confirm   BACKSPACE to erase', W/2, H - 30, {size:8, color:'rgba(232,232,245,0.4)'});
+}
+
+// --------------------------------------------------------------------
+//  SCENE: COUNTDOWN
+// --------------------------------------------------------------------
+
+function drawCountdown(){
+  drawBackground();
+  drawSnake();
+  drawFood();
+  drawHUD();
+
+  const total = 3000;
+  const t = stateTime;
+  let label;
+  if (t < 1000) label = '3';
+  else if (t < 2000) label = '2';
+  else if (t < 3000) label = '1';
+  else { state = STATES.PLAYING; stateTime = 0; tickTimer = 0; return; }
+
+  const phase = (t % 1000) / 1000;
+  const scale = 1 + (1 - phase) * 0.6;
+  const alpha = 1 - phase*0.4;
+
+  ctx.save();
+  ctx.translate(W/2, H/2);
+  ctx.scale(scale, scale);
+  ctx.globalAlpha = alpha;
+  drawText(label, 0, 0, {size:64, color:'#9cff9c', shadow:'#1a8a1a'});
+  ctx.restore();
+
+  drawText('GET READY, ' + (players[currentPlayer]?.name || 'PLAYER').toUpperCase(),
+           W/2, H/2 + 80, {size:12, color:'#e8e8f5'});
+}
+
+// --------------------------------------------------------------------
+//  SCENE: PLAYING
+// --------------------------------------------------------------------
+
+function drawPlaying(){
+  drawBackground();
+  drawFood();
+  drawSnake();
+  drawParticles();
+  drawHUD();
+  drawHellfireOverlay();
+  drawBonusFlash();
+  drawEscalationBanner();
+  drawSwipeHint();
+}
+
+// Draws a subtle line + dot from swipe start to the current finger position
+// while a touch gesture is in progress during PLAYING. Maps from CSS-pixel
+// client coordinates (where touch events live) into the canvas's internal
+// 768×528 coordinate space so the line aligns with the finger at any zoom
+// or aspect ratio.
+function drawSwipeHint(){
+  if (!touchActive || state !== STATES.PLAYING) return;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+  const sx = (touchStartX - rect.left) * (W / rect.width);
+  const sy = (touchStartY - rect.top)  * (H / rect.height);
+  const cx = (touchCurX   - rect.left) * (W / rect.width);
+  const cy = (touchCurY   - rect.top)  * (H / rect.height);
+  const dx = cx - sx, dy = cy - sy;
+  if (Math.hypot(dx, dy) < 8) return;
+
+  ctx.save();
+  // colour switches green→amber once the swipe is long enough to fire,
+  // giving instant visual confirmation that the gesture will register
+  const willFire = Math.max(Math.abs(dx), Math.abs(dy)) >= SWIPE_MIN_DIST;
+  const stroke = willFire ? 'rgba(255,210,74,0.75)' : 'rgba(124,255,124,0.55)';
+  const fill   = willFire ? 'rgba(255,210,74,0.95)' : 'rgba(124,255,124,0.85)';
+
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(cx, cy); ctx.stroke();
+  ctx.fillStyle = fill;
+  ctx.beginPath(); ctx.arc(sx, sy, 4, 0, Math.PI*2); ctx.fill();
+  ctx.beginPath(); ctx.arc(cx, cy, 7, 0, Math.PI*2); ctx.fill();
+  ctx.restore();
+}
+
+// =====  ESKALATION BANNERS (levels 4, 5, 6)  =====
+function drawEscalationBanner(){
+  if (!escalationBanner) return;
+  const b = escalationBanner;
+  const phase = 1 - (b.time / b.total); // 0 → 1
+  // entry: slide-in + scale; hold: pulse; exit: fade
+  let alpha, scale, yOffset;
+  if (phase < 0.18){
+    const e = phase / 0.18;
+    alpha = e;
+    scale = 0.4 + 1.0*e;
+    yOffset = -120 + 120*e;
+  } else if (phase > 0.78){
+    const e = (phase - 0.78) / 0.22;
+    alpha = 1 - e;
+    scale = 1 + e*0.4;
+    yOffset = -e*40;
+  } else {
+    alpha = 1;
+    scale = 1 + 0.05*Math.sin(performance.now()/110);
+    yOffset = 0;
+  }
+
+  const cx = W/2;
+  const cy = H/2 + yOffset;
+  const t = performance.now();
+
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.translate(cx, cy);
+  ctx.scale(scale, scale);
+
+  if (b.level === 4){
+    // ESKALATION! — fiery
+    // background bar
+    const bw = 560, bh = 110;
+    const grd = ctx.createLinearGradient(-bw/2, 0, bw/2, 0);
+    grd.addColorStop(0, 'rgba(255,42,10,0.0)');
+    grd.addColorStop(0.5, 'rgba(255,122,26,0.55)');
+    grd.addColorStop(1, 'rgba(255,42,10,0.0)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(-bw/2, -bh/2, bw, bh);
+    // border lines
+    ctx.strokeStyle = `rgba(255,210,74,${0.6 + 0.4*Math.sin(t/120)})`;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-bw/2+6, -bh/2+6, bw-12, bh-12);
+    // text
+    ctx.shadowColor = '#ff2a0a';
+    ctx.shadowBlur = 18;
+    drawText('ESKALATION!', 0, 0, {size:42, color:'#ffd24a', shadow:'#ff2a0a'});
+    ctx.shadowBlur = 0;
+    drawText('LV.5  HELLFIRE  IGNITES', 0, 38, {size:10, color:'rgba(255,210,140,0.85)'});
+    // spark particles
+    if (Math.random() < 0.9) addParticle(cx + (Math.random()-0.5)*420, cy + (Math.random()-0.5)*40, false, 3);
+  } else if (b.level === 5){
+    // MASSIVE ESKALATION — pulsing blues
+    const pulse = 0.5 + 0.5*Math.sin(t/160);
+    const bw = 620, bh = 130;
+    // layered gradient
+    const grd = ctx.createLinearGradient(-bw/2, 0, bw/2, 0);
+    grd.addColorStop(0, `rgba(8,18,60,0)`);
+    grd.addColorStop(0.5, `rgba(${40 + 60*pulse},${120 + 100*pulse},255,${0.6})`);
+    grd.addColorStop(1, `rgba(8,18,60,0)`);
+    ctx.fillStyle = grd;
+    ctx.fillRect(-bw/2, -bh/2, bw, bh);
+    // double border
+    ctx.strokeStyle = `rgba(160,210,255,${0.4 + 0.5*pulse})`;
+    ctx.lineWidth = 3;
+    ctx.strokeRect(-bw/2+4, -bh/2+4, bw-8, bh-8);
+    ctx.strokeStyle = `rgba(60,120,220,${0.4 + 0.4*(1-pulse)})`;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(-bw/2+12, -bh/2+12, bw-24, bh-24);
+    // text
+    ctx.shadowColor = `hsl(210, 100%, ${50 + 25*pulse}%)`;
+    ctx.shadowBlur = 22;
+    const textColor = `hsl(205, 100%, ${70 + 20*pulse}%)`;
+    drawText('MASSIVE', 0, -18, {size:34, color:textColor, shadow:'#0a1a4a'});
+    drawText('ESKALATION', 0, 22, {size:34, color:textColor, shadow:'#0a1a4a'});
+    ctx.shadowBlur = 0;
+    drawText('LV.6   COLD-FIRE  OVERDRIVE', 0, 54, {size:9, color:'rgba(160,210,255,0.85)'});
+    // ice / blue particle spawn
+    if (Math.random() < 0.7) addParticle(cx + (Math.random()-0.5)*500, cy + (Math.random()-0.5)*50, false, 5);
+  } else if (b.level === 6){
+    // SUPER ESKALATION — rainbow gradient
+    const bw = 680, bh = 150;
+    const grd = ctx.createLinearGradient(-bw/2, 0, bw/2, 0);
+    const off = (t/40) % 360;
+    for (let s = 0; s <= 6; s++){
+      grd.addColorStop(s/6, `hsla(${(off + s*60) % 360}, 95%, 55%, 0.65)`);
+    }
+    ctx.fillStyle = grd;
+    ctx.fillRect(-bw/2, -bh/2, bw, bh);
+    // rainbow border
+    for (let s = 0; s < 24; s++){
+      const hue = (off + s*15) % 360;
+      ctx.strokeStyle = `hsla(${hue}, 95%, 60%, 0.85)`;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(-bw/2 + s*2, -bh/2 + s*2, bw - s*4, bh - s*4);
+      if (s > 4) break;
+    }
+    // text — letter-by-letter rainbow
+    const drawRainbowText = (str, y, size) => {
+      ctx.font = size+'px "Press Start 2P", monospace';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      const widths = [];
+      let total = 0;
+      for (const ch of str){
+        const w = ctx.measureText(ch).width;
+        widths.push(w);
+        total += w;
+      }
+      let px = -total/2;
+      let idx = 0;
+      for (const ch of str){
+        const hue = (off + idx*28) % 360;
+        ctx.fillStyle = `hsl(${hue}, 95%, 65%)`;
+        ctx.shadowColor = `hsl(${(hue+60)%360}, 95%, 50%)`;
+        ctx.shadowBlur = 14;
+        ctx.fillText(ch, px, y);
+        px += widths[idx];
+        idx++;
+      }
+      ctx.shadowBlur = 0;
+      ctx.textAlign = 'center';
+    };
+    drawRainbowText('SUPER',      -22, 38);
+    drawRainbowText('ESKALATION',  22, 38);
+    drawText('LV.7   PRISM  OVERFLOW', 0, 58, {size:9, color:'rgba(255,255,255,0.85)'});
+    // colourful spark spawn
+    if (Math.random() < 0.95) addParticle(cx + (Math.random()-0.5)*560, cy + (Math.random()-0.5)*60, false, 6);
+  }
+
+  ctx.restore();
+}
+
+function drawHellfireOverlay(){
+  // brief screen flash when crossing into level 4
+  if (infernoFlash > 0){
+    const a = infernoFlash / 700;
+    ctx.fillStyle = `rgba(180,80,255,${a*0.45})`;
+    ctx.fillRect(0,0,W,H);
+  }
+  // persistent vignette tint at level 4
+  if (!frozen && fireLevel() === 4){
+    const t = performance.now();
+    const pulse = 0.18 + 0.12 * Math.sin(t/280);
+    const grd = ctx.createRadialGradient(W/2, H/2, H*0.35, W/2, H/2, H*0.85);
+    grd.addColorStop(0, 'rgba(140,40,255,0)');
+    grd.addColorStop(1, `rgba(180,30,80,${pulse})`);
+    ctx.fillStyle = grd;
+    ctx.fillRect(0,0,W,H);
+  }
+}
+
+function drawBonusFlash(){
+  if (!bonusFlash) return;
+  const total = 1500;
+  const t = bonusFlash.time;
+  const phase = 1 - t/total;             // 0 -> 1
+  const yOffset = -phase * 70;
+  const alpha = t > 250 ? 1 : t/250;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.shadowColor = '#ffd24a';
+  ctx.shadowBlur = 16;
+  drawText('+' + bonusFlash.points + '  BONUS!', W/2, H/2 + yOffset,
+           {size:24, color:'#ffd24a', shadow:'#ff7a1a'});
+  ctx.restore();
+}
+
+function drawPaused(){
+  drawPlaying();
+  ctx.fillStyle = 'rgba(0,0,0,0.65)';
+  ctx.fillRect(0,0,W,H);
+  drawText('PAUSED', W/2, H/2 - 10, {size:32, color:'#9cff9c', shadow:'#1a8a1a'});
+  drawText('ESC  to  resume', W/2, H/2 + 30, {size:10, color:'rgba(232,232,245,0.6)'});
+}
+
+// --------------------------------------------------------------------
+//  SCENE: GAME OVER
+// --------------------------------------------------------------------
+
+function drawBiteEffect(){
+  if (biteX < 0) return;
+  const cx = biteX*CELL + CELL/2;
+  const cy = biteY*CELL + CELL/2;
+  const t = stateTime;
+
+  // initial bite flash on segment
+  if (t < 320){
+    ctx.fillStyle = `rgba(255,255,255,${1 - t/320})`;
+    ctx.fillRect(biteX*CELL+1, biteY*CELL+1, CELL-2, CELL-2);
+  }
+
+  // expanding shock rings
+  if (t < 900){
+    const r1 = (t/900) * CELL * 2.0;
+    const a1 = 1 - t/900;
+    ctx.strokeStyle = `rgba(255,80,40,${a1})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(cx, cy, r1, 0, Math.PI*2); ctx.stroke();
+    ctx.strokeStyle = `rgba(255,220,80,${a1*0.7})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(cx, cy, r1*0.55, 0, Math.PI*2); ctx.stroke();
+  }
+
+  // chomp marks (4 little teeth marks pulsing outward)
+  if (t < 1100){
+    const a = 1 - t/1100;
+    ctx.fillStyle = `rgba(255,80,40,${a})`;
+    const off = Math.min(10, t/25);
+    for (let i=0;i<4;i++){
+      const ang = i * Math.PI/2 + Math.PI/4;
+      const tx = cx + Math.cos(ang)*off;
+      const ty = cy + Math.sin(ang)*off;
+      ctx.fillRect(tx-2, ty-2, 4, 4);
+    }
+  }
+}
+
+function drawGameover(){
+  // shake offset during bite phase
+  let sx = 0, sy = 0;
+  if (shakeTime > 0){
+    const m = Math.min(7, shakeTime/55);
+    sx = (Math.random()-0.5)*m*2;
+    sy = (Math.random()-0.5)*m*2;
+  }
+
+  // freeze frame underneath (with shake during bite)
+  ctx.save();
+  ctx.translate(sx, sy);
+  drawBackground();
+  drawFood();
+  drawSnake();
+  drawBiteEffect();
+  drawParticles();
+  drawHUD();
+  ctx.restore();
+
+  // initial white flash on impact
+  if (stateTime < 110){
+    ctx.fillStyle = `rgba(255,255,255,${0.75 * (1 - stateTime/110)})`;
+    ctx.fillRect(0,0,W,H);
+  }
+
+  // Phase 1 (~1.4s): bite animation only — no overlay yet
+  if (stateTime < 1400) return;
+
+  // Phase 2: overlay with GAME / [logo] / OVER
+  const phase = Math.min(1, (stateTime - 1400) / 700);
+  ctx.fillStyle = `rgba(8,8,15,${0.88 * phase})`;
+  ctx.fillRect(0,0,W,H);
+
+  ctx.globalAlpha = phase;
+
+  // GAME (top, neon green)
+  drawText('GAME', W/2, 60, {size:38, color:'#9cff9c', shadow:'#1a8a1a'});
+
+  // Fire-barrel logo, centered (logical 30 x 32, scale 5 -> 150 x 160)
+  drawFireBarrel(W/2 - 75, 90, 5);
+
+  // OVER (below logo, fiery orange)
+  ctx.shadowColor = '#ff7a1a';
+  ctx.shadowBlur = 14 + Math.sin(performance.now()/180)*4;
+  drawText('OVER', W/2, 320, {size:38, color:'#ffd24a', shadow:'#ff2a0a'});
+  ctx.shadowBlur = 0;
+
+  // player + score
+  drawText((players[currentPlayer]?.name || 'PLAYER').toUpperCase(), W/2, 372, {size:14, color:'#e8e8f5'});
+  drawText('SCORE  ' + score, W/2, 402, {size:14, color:'#9cff9c'});
+
+  if (stateTime > 2400){
+    const blink = Math.sin(performance.now()/250) > 0;
+    if (blink){
+      const more = currentPlayer < players.length - 1
+        ? 'NEXT  PLAYER  -  PRESS  ENTER'
+        : 'SHOW  RESULTS  -  PRESS  ENTER';
+      drawText(more, W/2, 446, {size:10, color:'rgba(232,232,245,0.75)'});
+    }
+  }
+
+  drawText('a  FEUERTONNEN_PRODUCTIONS  joint', W/2, H - 14, {size:7, color:'rgba(232,232,245,0.4)'});
+
+  ctx.globalAlpha = 1;
+}
+
+// --------------------------------------------------------------------
+//  SCENE: RESULTS
+// --------------------------------------------------------------------
+
+function drawResults(){
+  drawBackground();
+  drawTitleSmall();
+  drawText('ROUND  '+roundNum+'  RESULTS', W/2, 130, {size:14, color:'#9cff9c', shadow:'#1a8a1a'});
+
+  // ===== current round ranking (left column) =====
+  const ranking = [...players].sort((a,b)=>b.score-a.score);
+  const startY = 170;
+  for (let i=0;i<ranking.length;i++){
+    const p = ranking[i];
+    const y = startY + i*26;
+    const medal = ['1st','2nd','3rd','4th'][i] || (i+1)+'.';
+    const color = i===0 ? '#ffd24a' : i===1 ? '#cfcfdf' : i===2 ? '#ff8a2a' : '#e8e8f5';
+    drawText(medal, 60, y, {size:11, color, align:'left'});
+    drawText(p.name.toUpperCase(), 120, y, {size:11, color, align:'left'});
+    drawText(String(p.score).padStart(4,'0'), 340, y, {size:11, color, align:'right'});
+  }
+
+  // ===== session leaderboard (right column) — eternal across all rounds in this session =====
+  drawText('SESSION  TABLE', 580, 150, {size:11, color:'#ff8a2a', shadow:'#ff2a0a'});
+
+  // aggregate per name across all rounds in this session
+  const totals = new Map();
+  for (const e of sessionTable){
+    const key = e.name.toUpperCase();
+    const cur = totals.get(key) || { name: e.name, score: 0, rounds: 0 };
+    cur.score += e.score;
+    cur.rounds += 1;
+    totals.set(key, cur);
+  }
+  const sessionRank = [...totals.values()].sort((a,b)=>b.score-a.score);
+  const sStartY = 180;
+  const maxRows = 8;
+  if (sessionRank.length === 0){
+    drawText('—  no  rounds  yet  —', 580, sStartY+10, {size:8, color:'rgba(232,232,245,0.5)'});
+  } else {
+    // header
+    drawText('PLAYER',    430, sStartY, {size:8, color:'rgba(232,232,245,0.55)', align:'left'});
+    drawText('R',         640, sStartY, {size:8, color:'rgba(232,232,245,0.55)', align:'right'});
+    drawText('TOTAL',     730, sStartY, {size:8, color:'rgba(232,232,245,0.55)', align:'right'});
+    for (let i=0;i<Math.min(maxRows, sessionRank.length);i++){
+      const r = sessionRank[i];
+      const y = sStartY + 18 + i*22;
+      const color = i===0 ? '#ffd24a' : '#e8e8f5';
+      drawText(String(i+1)+'.', 410, y, {size:10, color, align:'left'});
+      drawText(r.name.toUpperCase(), 430, y, {size:10, color, align:'left'});
+      drawText(String(r.rounds), 640, y, {size:10, color, align:'right'});
+      drawText(String(r.score).padStart(5,'0'), 730, y, {size:10, color, align:'right'});
+    }
+  }
+
+  // ===== GLOBAL TOP 10 from Firebase (two columns) =====
+  drawText('GLOBAL  TOP  10', W/2, 378, {size:10, color:'#33d6ff', align:'center'});
+  if (!USE_FIREBASE){
+    drawText('OFFLINE  —  nur  lokal', W/2, 398, {size:8, color:'rgba(232,232,245,0.45)', align:'center'});
+  } else if (!fbReady){
+    drawText('connecting...', W/2, 394, {size:8, color:'rgba(232,232,245,0.5)', align:'center'});
+    if (scoreUploadQueue.length){
+      drawText(String(scoreUploadQueue.length)+'  scores  queued', W/2, 408, {size:7, color:'rgba(232,232,245,0.45)', align:'center'});
+    }
+  } else if (!globalTop10 || globalTop10.length === 0){
+    drawText('no  global  scores  yet', W/2, 398, {size:8, color:'rgba(232,232,245,0.5)', align:'center'});
+  } else {
+    const gy = 388;
+    for (let i = 0; i < 5 && i < globalTop10.length; i++){
+      const e = globalTop10[i];
+      const nm = (e.name || '?').substring(0, 10).toUpperCase();
+      const color = i === 0 ? '#ffd24a' : '#e8e8f5';
+      drawText((i + 1) + '. ' + nm + '  ' + String(e.score || 0), 170, gy + i * 12, {size: 7, color, align: 'left'});
+    }
+    for (let i = 5; i < 10 && i < globalTop10.length; i++){
+      const e = globalTop10[i];
+      const nm = (e.name || '?').substring(0, 10).toUpperCase();
+      drawText((i + 1) + '. ' + nm + '  ' + String(e.score || 0), 448, gy + (i - 5) * 12, {size: 7, color: '#e8e8f5', align: 'left'});
+    }
+  }
+  if (USE_FIREBASE && lastFbWriteError){
+    drawText(lastFbWriteError.slice(0, 44), W/2, 454, {size: 6, color: '#ff6a6a', align: 'center'});
+  }
+
+  if (stateTime > 800){
+    const blink = Math.sin(performance.now()/250) > 0;
+    if (blink){
+      drawText('R  =  PLAY  AGAIN  (same  names)', W/2, H - 36, {size:9, color:'#9cff9c'});
+    }
+    drawText('ENTER  =  MAIN  MENU', W/2, H - 18, {size:8, color:'rgba(232,232,245,0.65)'});
+  }
+}
+
+// --------------------------------------------------------------------
+//  SCENE: HIGHSCORE
+// --------------------------------------------------------------------
+
+function drawHighscore(){
+  drawBackground();
+  drawTitleSmall();
+  drawText('HALL  OF  FLAME', W/2, 118, {size:13, color:'#ff8a2a', shadow:'#ff2a0a'});
+  drawText('LOCAL  (DEVICE)  +  GLOBAL  (ONLINE)', W/2, 138, {size:7, color:'rgba(232,232,245,0.5)'});
+
+  const localY0 = 152;
+  if (highscore.length === 0){
+    drawText('NO  LOCAL  SCORES  —  GO  PLAY!', W/2, localY0 + 36, {size:10, color:'rgba(232,232,245,0.65)'});
+  } else {
+    for (let i = 0; i < highscore.length; i++){
+      const e = highscore[i];
+      const y = localY0 + i * 20;
+      const color = i === 0 ? '#ffd24a' : '#e8e8f5';
+      drawText(String(i + 1).padStart(2, ' ') + '.', W/2 - 220, y, {size: 10, color, align: 'left'});
+      drawText(e.name.toUpperCase(), W/2 - 160, y, {size: 10, color, align: 'left'});
+      drawText(String(e.score).padStart(4, '0'), W/2 + 80, y, {size: 10, color, align: 'right'});
+      drawText(e.date || '', W/2 + 220, y, {size: 8, color: 'rgba(232,232,245,0.45)', align: 'right'});
+    }
+  }
+
+  const gTitleY = 358;
+  drawText('GLOBAL  TOP  10', W/2, gTitleY, {size: 8, color: '#33d6ff'});
+  if (!USE_FIREBASE){
+    drawText('OFFLINE  —  keine  Cloud', W/2, gTitleY + 18, {size: 7, color: 'rgba(232,232,245,0.45)'});
+  } else if (!fbReady){
+    drawText('connecting...', W/2, gTitleY + 18, {size: 7, color: 'rgba(232,232,245,0.45)'});
+  } else if (!globalTop10 || globalTop10.length === 0){
+    drawText('no  global  scores  yet', W/2, gTitleY + 18, {size: 7, color: 'rgba(232,232,245,0.45)'});
+  } else {
+    const gy = gTitleY + 26;
+    for (let i = 0; i < 5 && i < globalTop10.length; i++){
+      const e = globalTop10[i];
+      const nm = (e.name || '?').substring(0, 10).toUpperCase();
+      const color = i === 0 ? '#ffd24a' : '#e8e8f5';
+      drawText((i + 1) + '. ' + nm + '  ' + String(e.score || 0), 170, gy + i * 11, {size: 6, color, align: 'left'});
+    }
+    for (let i = 5; i < 10 && i < globalTop10.length; i++){
+      const e = globalTop10[i];
+      const nm = (e.name || '?').substring(0, 10).toUpperCase();
+      drawText((i + 1) + '. ' + nm + '  ' + String(e.score || 0), 448, gy + (i - 5) * 11, {size: 6, color: '#e8e8f5', align: 'left'});
+    }
+  }
+
+  drawText('PRESS  ENTER  /  ESC  TO  RETURN', W/2, H - 50, {size:9, color:'rgba(232,232,245,0.5)'});
+  drawText('a  FEUERTONNEN_PRODUCTIONS  joint   ·   v'+GAME_VERSION, W/2, H - 24, {size:7, color:'rgba(255,140,60,0.5)'});
+}
+
+// --------------------------------------------------------------------
+//  INPUT
+// --------------------------------------------------------------------
+
+window.addEventListener('keydown', e => {
+  // prevent page scroll on arrows / space
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
+  routeKey(e);
+});
+
+// --------------------------------------------------------------------
+//  TOUCH / SWIPE INPUT  (iOS + Android + touch laptops)
+// --------------------------------------------------------------------
+//
+//  Swipes anywhere on the canvas are recognised as one of four directions
+//  and fed through setDir() — same code path as the keyboard, so the
+//  existing 180°-reversal guard and 2-deep dirQueue cap apply unchanged.
+//
+//  A tap (short distance, short duration) acts as ENTER on the non-playing
+//  screens so the entire game flow is reachable on a touch device.
+
+const SWIPE_MIN_DIST = 30;   // px — minimum travel to register as swipe (filters jitter / taps)
+const SWIPE_MAX_TIME = 500;  // ms — only flicks count (slow drags are ignored)
+
+let touchActive = false;     // true between touchstart and touchend/cancel
+let swipeHandled = false;    // becomes true the moment a direction fires —
+                             // prevents touchmove + touchend from double-firing
+                             // the same gesture. Reset on next touchstart.
+let touchStartX = 0, touchStartY = 0, touchStartT = 0;
+let touchCurX   = 0, touchCurY   = 0;
+
+// Try to convert the current touch delta into a direction. Called from both
+// touchmove (snappy mid-swipe trigger) and touchend (catch-up for shorter
+// flicks). Returns silently if thresholds aren't met or a swipe has already
+// fired in this gesture.
+function tryRegisterSwipe(){
+  if (swipeHandled) return;
+  const dx = touchCurX - touchStartX;
+  const dy = touchCurY - touchStartY;
+  const adx = Math.abs(dx), ady = Math.abs(dy);
+  if (Math.max(adx, ady) < SWIPE_MIN_DIST) return;
+  if (performance.now() - touchStartT > SWIPE_MAX_TIME) return;
+  swipeHandled = true;
+  // dominant axis decides direction
+  if (adx > ady){
+    setDir({ x: dx > 0 ?  1 : -1, y: 0 });
+  } else {
+    setDir({ x: 0, y: dy > 0 ?  1 : -1 });
+  }
+}
+
+// A short tap on non-playing screens is the touch equivalent of pressing
+// ENTER (or ESC for pause). Lets a mobile user navigate intro → menu →
+// player setup → results without a hardware keyboard.
+function tapAsEnter(){
+  const enter  = { key: 'Enter',  preventDefault(){} };
+  const escape = { key: 'Escape', preventDefault(){} };
+  switch(state){
+    case STATES.INTRO:
+    case STATES.MENU:
+    case STATES.PCOUNT:
+    case STATES.GAMEOVER:
+    case STATES.RESULTS:
+    case STATES.HIGHSCORE:
+      routeKey(enter); break;
+    case STATES.PAUSED:
+      routeKey(escape); break;
+    case STATES.NAME:
+      // tap re-opens the soft keyboard if the user dismissed it
+      focusNameInput(); break;
+    // PLAYING handles taps as swipe attempts (filtered by min distance).
+  }
+}
+
+canvas.addEventListener('touchstart', e => {
+  // single-finger only; ignore multi-touch so pinch/zoom can't be mistaken for a swipe
+  if (e.touches.length > 1) return;
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchActive = true;
+  swipeHandled = false;
+  touchStartX = touchCurX = t.clientX;
+  touchStartY = touchCurY = t.clientY;
+  touchStartT = performance.now();
+}, { passive: false });
+
+canvas.addEventListener('touchmove', e => {
+  if (!touchActive) return;
+  e.preventDefault();
+  const t = e.changedTouches[0];
+  touchCurX = t.clientX;
+  touchCurY = t.clientY;
+  // fire as soon as threshold met during PLAYING — snappy feel
+  if (state === STATES.PLAYING) tryRegisterSwipe();
+}, { passive: false });
+
+canvas.addEventListener('touchend', e => {
+  if (!touchActive) return;
+  e.preventDefault();
+  touchActive = false;
+  if (state === STATES.PLAYING){
+    // last chance to register if the user lifted before threshold during move
+    tryRegisterSwipe();
+  } else if (!swipeHandled){
+    // short tap → treat as ENTER on menu-style screens
+    const dx = touchCurX - touchStartX;
+    const dy = touchCurY - touchStartY;
+    const dist = Math.hypot(dx, dy);
+    const dt   = performance.now() - touchStartT;
+    if (dist < SWIPE_MIN_DIST && dt < SWIPE_MAX_TIME){
+      tapAsEnter();
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchcancel', () => {
+  touchActive = false;
+  swipeHandled = false;
+});
+
+// --------------------------------------------------------------------
+//  MOBILE NAME ENTRY — drives the iOS / Android soft keyboard via a
+//  hidden text input. Sync is one-way: input.value → nameBuf, so a
+//  keydown 'a' on desktop and an 'input' event on mobile end up with
+//  the same nameBuf without double-counting.
+// --------------------------------------------------------------------
+const nameInputEl = document.getElementById('nameInput');
+if (nameInputEl){
+  nameInputEl.addEventListener('input', () => {
+    if (state !== STATES.NAME) return;
+    nameBuf = nameInputEl.value.toUpperCase()
+      .replace(/[^A-Z0-9ÄÖÜ _.\-]/g, '').slice(0, 12);
+    nameInputEl.value = nameBuf;
+  });
+  nameInputEl.addEventListener('keydown', e => {
+    if (state === STATES.NAME && e.key === 'Enter'){
+      e.preventDefault();
+      routeKey({ key: 'Enter', preventDefault(){} });
+    }
+  });
+}
+function focusNameInput(){
+  if (!nameInputEl) return;
+  nameInputEl.value = nameBuf || '';
+  // brief defer so iOS reliably opens the keyboard
+  setTimeout(() => { try { nameInputEl.focus(); } catch(_) {} }, 30);
+}
+function blurNameInput(){
+  if (nameInputEl){ try { nameInputEl.blur(); } catch(_) {} }
+}
+
+function routeKey(e){
+  switch(state){
+    case STATES.INTRO:
+      if (e.key === 'Enter' || e.key === ' '){
+        state = STATES.MENU; stateTime = 0;
+      }
+      break;
+    case STATES.MENU:
+      if (e.key === 'ArrowUp')   { menuSel = (menuSel - 1 + menuItems.length) % menuItems.length; }
+      else if (e.key === 'ArrowDown'){ menuSel = (menuSel + 1) % menuItems.length; }
+      else if (e.key === 'Enter'){
+        if (menuItems[menuSel] === 'NEW GAME'){
+          playerCount = 1;
+          // brand-new session: wipe the session leaderboard
+          sessionTable = [];
+          roundNum = 0;
+          state = STATES.PCOUNT; stateTime = 0;
+        } else if (menuItems[menuSel] === 'HIGHSCORE'){
+          state = STATES.HIGHSCORE; stateTime = 0;
+        }
+      } else if (e.key === 'Escape'){
+        state = STATES.INTRO; stateTime = 0;
+      }
+      break;
+    case STATES.PCOUNT:
+      if (e.key === 'ArrowLeft')  playerCount = Math.max(1, playerCount-1);
+      else if (e.key === 'ArrowRight') playerCount = Math.min(4, playerCount+1);
+      else if (e.key === 'Enter'){
+        players = [];
+        for (let i=0;i<playerCount;i++) players.push({name:'P'+(i+1), score:0});
+        nameIdx = 0; nameBuf = '';
+        state = STATES.NAME; stateTime = 0;
+        focusNameInput();
+      } else if (e.key === 'Escape'){
+        state = STATES.MENU; stateTime = 0;
+      }
+      break;
+    case STATES.NAME:
+      if (e.key === 'Enter'){
+        if (nameBuf.length >= 1){
+          players[nameIdx].name = nameBuf;
+          nameBuf = '';
+          nameIdx++;
+          if (nameInputEl) nameInputEl.value = '';
+          if (nameIdx >= players.length){
+            currentPlayer = 0;
+            blurNameInput();
+            startCountdown();
+          } else {
+            focusNameInput();
+          }
+        }
+      } else if (e.key === 'Backspace'){
+        nameBuf = nameBuf.slice(0,-1);
+        if (nameInputEl) nameInputEl.value = nameBuf;
+      } else if (e.key === 'Escape'){
+        if (nameIdx === 0){ state = STATES.PCOUNT; blurNameInput(); }
+        else { nameIdx--; nameBuf = players[nameIdx].name; if (nameInputEl) nameInputEl.value = nameBuf; }
+      } else if (e.key.length === 1 && /^[a-zA-Z0-9äöüÄÖÜß _.-]$/.test(e.key) && nameBuf.length < 12){
+        // skip on mobile — the input event already handles this and would double-add
+        if (document.activeElement !== nameInputEl){
+          nameBuf += e.key;
+        }
+      }
+      break;
+    case STATES.PLAYING:
+      if (e.key === 'ArrowUp' || e.key.toLowerCase() === 'w') setDir({x:0,y:-1});
+      else if (e.key === 'ArrowDown' || e.key.toLowerCase() === 's') setDir({x:0,y:1});
+      else if (e.key === 'ArrowLeft' || e.key.toLowerCase() === 'a') setDir({x:-1,y:0});
+      else if (e.key === 'ArrowRight' || e.key.toLowerCase() === 'd') setDir({x:1,y:0});
+      else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P'){
+        state = STATES.PAUSED; stateTime = 0;
+      }
+      break;
+    case STATES.PAUSED:
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P' || e.key === 'Enter'){
+        state = STATES.PLAYING; stateTime = 0;
+      }
+      break;
+    case STATES.GAMEOVER:
+      if (stateTime > 800 && (e.key === 'Enter' || e.key === ' ')){
+        advanceAfterDeath();
+      }
+      break;
+    case STATES.RESULTS:
+      if (e.key === 'r' || e.key === 'R'){
+        // play again with same names — keep session leaderboard, just new round
+        playAgainSameNames();
+      } else if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape'){
+        state = STATES.MENU; stateTime = 0;
+      }
+      break;
+    case STATES.HIGHSCORE:
+      if (e.key === 'Enter' || e.key === ' ' || e.key === 'Escape'){
+        state = STATES.MENU; stateTime = 0;
+      }
+      break;
+  }
+}
+
+// --------------------------------------------------------------------
+//  MAIN LOOP
+// --------------------------------------------------------------------
+
+function update(dt){
+  stateTime += dt;
+  if (state === STATES.PLAYING){
+    tickTimer += dt;
+    // safety cap to avoid spiral on tab-resume
+    if (tickTimer > tickInterval * 4) tickTimer = tickInterval;
+    while (tickTimer >= tickInterval){
+      tickTimer -= tickInterval;
+      tickGame();
+      if (!alive) break;
+    }
+    updateParticles(dt);
+  } else if (state === STATES.GAMEOVER || state === STATES.INTRO){
+    updateParticles(dt);
+  }
+  if (shakeTime > 0) shakeTime -= dt;
+  if (infernoFlash > 0) infernoFlash -= dt;
+  if (bonusFlash){
+    bonusFlash.time -= dt;
+    if (bonusFlash.time <= 0) bonusFlash = null;
+  }
+  if (escalationBanner){
+    escalationBanner.time -= dt;
+    if (escalationBanner.time <= 0) escalationBanner = null;
+  }
+}
+
+function render(){
+  switch(state){
+    case STATES.INTRO:     drawIntro(); break;
+    case STATES.MENU:      drawMenu(); break;
+    case STATES.PCOUNT:    drawPCount(); break;
+    case STATES.NAME:      drawName(); break;
+    case STATES.COUNTDOWN: drawCountdown(); break;
+    case STATES.PLAYING:   drawPlaying(); break;
+    case STATES.PAUSED:    drawPaused(); break;
+    case STATES.GAMEOVER:  drawGameover(); break;
+    case STATES.RESULTS:   drawResults(); break;
+    case STATES.HIGHSCORE: drawHighscore(); break;
+  }
+}
+
+function loop(now){
+  const dt = lastTime ? Math.min(100, now - lastTime) : 16;
+  lastTime = now;
+  update(dt);
+  render();
+  requestAnimationFrame(loop);
+}
+
+// init particle list early so intro can use it
+particles = [];
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
