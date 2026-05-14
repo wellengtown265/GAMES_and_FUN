@@ -1,0 +1,3 @@
+# Static game (index.html + snake-on-fire.html). No build pipeline.
+[build]
+  publish = "."
