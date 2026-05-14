@@ -2,9 +2,10 @@
   "rules": {
     "highscores": {
       ".read": true,
+      ".indexOn": ["score"],
       "$entryId": {
         ".write": "!data.exists()",
-        ".validate": "newData.hasChildren(['name', 'score', 'date']) && newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 9999999 && newData.child('date').isString() && newData.child('date').val().length <= 40"
+        ".validate": "newData.hasChildren(['name', 'score', 'timestamp']) && newData.child('name').isString() && newData.child('name').val().length <= 24 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('score').val() <= 9999999 && newData.child('timestamp').isNumber() && newData.child('timestamp').val() > 0 && newData.child('timestamp').val() <= 9999999999999"
       }
     }
   }
