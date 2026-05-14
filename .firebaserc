@@ -1,5 +1,7 @@
 {
   "projects": {
-    "default": "snake-on-fire"
-  }
+    "default": "snake-on-fire-57e9f"
+  },
+  "targets": {},
+  "etags": {}
 }
