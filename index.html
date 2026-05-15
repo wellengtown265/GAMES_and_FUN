@@ -204,7 +204,7 @@
   </div>
   <!-- Tap-to-type button: touch-only, shown during NAME state -->
   <button id="nameBtn" hidden>⌨  TAP  TO  TYPE</button>
-  <input id="nameInput" type="text" maxlength="12" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="done">
+  <input id="nameInput" type="text" maxlength="10" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="done">
 <script>
 "use strict";
 
@@ -1439,10 +1439,10 @@ function drawName(){
   drawTitleSmall();
   drawText('PLAYER ' + (nameIdx+1) + ' — ENTER NAME', W/2, H/2 - 40, {size:14, color:'#e8e8f5'});
 
-  const display = nameBuf.toUpperCase().padEnd(12, '_').slice(0,12);
+  const display = nameBuf.toUpperCase().padEnd(10, '_').slice(0,10);
   // boxes
   const boxSize = 34, gap = 5;
-  const total = 12;
+  const total = 10;
   const startX = W/2 - (total*boxSize + (total-1)*gap)/2;
   for (let i=0;i<total;i++){
     const x = startX + i*(boxSize+gap);
@@ -1459,7 +1459,7 @@ function drawName(){
     }
   }
 
-  drawText('TYPE NAME (1-12 LETTERS)   ENTER to confirm   BACKSPACE to erase', W/2, H - 30, {size:8, color:'rgba(232,232,245,0.4)'});
+  drawText('TYPE NAME (1-10 LETTERS)   ENTER to confirm   BACKSPACE to erase', W/2, H - 30, {size:8, color:'rgba(232,232,245,0.4)'});
 }
 
 // --------------------------------------------------------------------
@@ -2056,7 +2056,7 @@ function drawGlobalHighscore(){
       drawText(flameChar + ' #' + (i + 1), boxX + 20, y, {size:9, color, align:'left'});
 
       // Player name
-      const nm = (e.name || '?').substring(0, 11).toUpperCase();
+      const nm = (e.name || '?').substring(0, 10).toUpperCase();
       drawText(nm, boxX + 110, y, {size:9, color, align:'left'});
 
       // Score with snake icon
@@ -2228,7 +2228,7 @@ if (nameInputEl){
   nameInputEl.addEventListener('input', () => {
     if (state !== STATES.NAME) return;
     nameBuf = nameInputEl.value.toUpperCase()
-      .replace(/[^A-Z0-9ÄÖÜ _.\-]/g, '').slice(0, 12);
+      .replace(/[^A-Z0-9ÄÖÜ _.\-]/g, '').slice(0, 10);
     nameInputEl.value = nameBuf;
   });
   nameInputEl.addEventListener('keydown', e => {
@@ -2307,7 +2307,7 @@ function routeKey(e){
       } else if (e.key === 'Escape'){
         if (nameIdx === 0){ state = STATES.PCOUNT; blurNameInput(); }
         else { nameIdx--; nameBuf = players[nameIdx].name; if (nameInputEl) nameInputEl.value = nameBuf; }
-      } else if (e.key.length === 1 && /^[a-zA-Z0-9äöüÄÖÜß _.-]$/.test(e.key) && nameBuf.length < 12){
+      } else if (e.key.length === 1 && /^[a-zA-Z0-9äöüÄÖÜß _.-]$/.test(e.key) && nameBuf.length < 10){
         // skip on mobile — the input event already handles this and would double-add
         if (document.activeElement !== nameInputEl){
           nameBuf += e.key;
