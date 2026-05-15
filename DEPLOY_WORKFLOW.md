@@ -43,10 +43,10 @@ git commit --no-verify -F /tmp/deploy-msg.txt
 ### 3. Push zu GitHub
 
 ```bash
-git push
+git -c http.version=HTTP/1.1 -c http.postBuffer=524288000 push origin main
 ```
 
-(bzw. `git push origin main`, je nach Default-Remote.)
+**Wichtig:** Das `-c http.version=HTTP/1.1` ist nötig — normales `git push` scheitert mit HTTP 400 auf diesem Rechner (HTTP/2-Inkompatibilität mit GitHub). Einmalig global setzen falls gewünscht: `git config --global http.version HTTP/1.1`
 
 ### 4. Firebase deployen
 
