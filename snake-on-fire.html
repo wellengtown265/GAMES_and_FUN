@@ -1913,12 +1913,20 @@ function drawHighscore(){
 
 // Global Highscore with Wellingtown background (Glassmorphism design)
 let globalBgImg = null;
+let globalBgLoading = false;
 function loadGlobalBg(){
-  if (globalBgImg) return;
+  if (globalBgImg || globalBgLoading) return;
+  globalBgLoading = true;
   const img = new Image();
-  img.crossOrigin = 'anonymous';
-  img.onload = () => { globalBgImg = img; };
-  img.onerror = () => { console.log('bg image not found (ok for offline)'); };
+  img.onload = () => {
+    globalBgImg = img;
+    console.log('✓ Wellingtown background loaded');
+  };
+  img.onerror = (e) => {
+    console.warn('⚠ Wellingtown bg not found (ok for offline)');
+    globalBgLoading = false;
+  };
+  // Load from local file or CDN
   img.src = './wellingtown.png';
 }
 

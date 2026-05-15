@@ -1923,11 +1923,11 @@ function loadGlobalBg(){
     console.log('✓ Wellingtown background loaded');
   };
   img.onerror = (e) => {
-    console.warn('⚠ Wellingtown bg not found (ok for offline)');
+    console.warn('⚠ Wellingtown bg not found:', e);
     globalBgLoading = false;
   };
-  // Load from local file or CDN
-  img.src = './wellingtown.png';
+  // Try multiple paths for flexibility (local file, relative, absolute)
+  img.src = './wellingtown.png?' + Date.now();
 }
 
 function drawGlobalHighscore(){
