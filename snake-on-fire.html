@@ -1925,43 +1925,51 @@ function loadGlobalBg(){
 function drawGlobalHighscore(){
   if (!globalBgImg) loadGlobalBg();
 
-  // Background: Wellingtown image if loaded, else fallback
+  // Background: Wellingtown image fills entire canvas, slightly darkened for visibility
   if (globalBgImg){
     ctx.drawImage(globalBgImg, 0, 0, W, H);
+    // Darken it slightly for text readability
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
+    ctx.fillRect(0, 0, W, H);
   } else {
     drawBackground();
   }
 
-  // Glassmorphism overlay: semi-transparent frosted glass
-  ctx.fillStyle = 'rgba(20, 20, 35, 0.75)';
-  ctx.fillRect(110, 60, 548, 380);
+  // Glassmorphism overlay: smaller, centered box
+  const boxW = 440;
+  const boxH = 320;
+  const boxX = (W - boxW) / 2;
+  const boxY = 80;
+
+  ctx.fillStyle = 'rgba(20, 20, 35, 0.8)';
+  ctx.fillRect(boxX, boxY, boxW, boxH);
 
   // Neon glow border (green)
   ctx.strokeStyle = 'rgba(124, 255, 124, 0.8)';
   ctx.lineWidth = 3;
-  ctx.strokeRect(110, 60, 548, 380);
+  ctx.strokeRect(boxX, boxY, boxW, boxH);
 
   // Inner glow (subtle)
   for (let i = 1; i <= 4; i++){
     ctx.strokeStyle = `rgba(124, 255, 124, ${0.15 / i})`;
     ctx.lineWidth = 1;
-    ctx.strokeRect(110 - i, 60 - i, 548 + 2*i, 380 + 2*i);
+    ctx.strokeRect(boxX - i, boxY - i, boxW + 2*i, boxH + 2*i);
   }
 
   // Title
-  drawText('🔥  GLOBAL  HIGHSCORE  🔥', W/2, 90, {size:13, color:'#ffd24a', shadow:'#ff2a0a'});
-  drawText('TOP 10 WORLDWIDE', W/2, 110, {size:7, color:'rgba(232,232,245,0.7)'});
+  drawText('🔥  GLOBAL  HIGHSCORE  🔥', W/2, 100, {size:12, color:'#ffd24a', shadow:'#ff2a0a'});
+  drawText('TOP 10 WORLDWIDE', W/2, 116, {size:6, color:'rgba(232,232,245,0.7)'});
 
   // Status indicator
   if (!USE_FIREBASE){
-    drawText('(OFFLINE  MODE)', W/2, 128, {size:6, color:'rgba(255,140,60,0.6)'});
+    drawText('(OFFLINE  MODE)', W/2, 130, {size:5, color:'rgba(255,140,60,0.6)'});
   } else if (!fbReady || !globalTop10 || globalTop10.length === 0){
-    drawText('(loading  global  scores...)', W/2, 128, {size:6, color:'rgba(124,255,124,0.6)'});
+    drawText('(loading...)', W/2, 130, {size:5, color:'rgba(124,255,124,0.6)'});
   }
 
   // Highscore table with decorative elements
-  const tableY = 150;
-  const rowH = 28;
+  const tableY = 152;
+  const rowH = 24;
 
   if (globalTop10 && globalTop10.length > 0){
     for (let i = 0; i < Math.min(10, globalTop10.length); i++){
@@ -1972,28 +1980,28 @@ function drawGlobalHighscore(){
 
       // Rank with flame icon
       const flameChar = (i < 3) ? '🔥' : '✦';
-      drawText(flameChar + ' #' + (i + 1), 140, y, {size:11, color, align:'left'});
+      drawText(flameChar + ' #' + (i + 1), boxX + 20, y, {size:9, color, align:'left'});
 
       // Player name
-      const nm = (e.name || '?').substring(0, 14).toUpperCase();
-      drawText(nm, 280, y, {size:11, color, align:'left'});
+      const nm = (e.name || '?').substring(0, 11).toUpperCase();
+      drawText(nm, boxX + 110, y, {size:9, color, align:'left'});
 
       // Score with snake icon
       const snakeChar = (i % 2 === 0) ? '🐍' : '→';
-      drawText(String(e.score || 0).padStart(6, ' ') + '  ' + snakeChar, 530, y, {size:11, color, align:'right'});
+      drawText(String(e.score || 0).padStart(5, ' ') + '  ' + snakeChar, boxX + boxW - 20, y, {size:9, color, align:'right'});
 
       // Visual separator
       if (i < Math.min(9, globalTop10.length - 1)){
         ctx.strokeStyle = 'rgba(124, 255, 124, 0.1)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        ctx.moveTo(130, y + rowH - 4);
-        ctx.lineTo(540, y + rowH - 4);
+        ctx.moveTo(boxX + 15, y + rowH - 2);
+        ctx.lineTo(boxX + boxW - 15, y + rowH - 2);
         ctx.stroke();
       }
     }
   } else if (USE_FIREBASE && fbReady){
-    drawText('NO  GLOBAL  SCORES  YET  —  BE  FIRST!', W/2, tableY + 50, {size:10, color:'rgba(232,232,245,0.6)'});
+    drawText('NO  GLOBAL  SCORES  YET', W/2, tableY + 50, {size:9, color:'rgba(232,232,245,0.6)'});
   }
 
   // Feuertonne + Schlange (bottom-left, prominent)
@@ -2003,7 +2011,7 @@ function drawGlobalHighscore(){
   drawText('PRODUCTIONS', 100, H - 60, {size:9, color:'rgba(255,212,74,0.7)'});
 
   // Footer hint
-  drawText('PRESS  ESC  /  ← BACK  TO  HIGHSCORE', W/2, H - 30, {size:9, color:'rgba(232,232,245,0.5)'});
+  drawText('PRESS  ESC  /  ← BACK  TO  HIGHSCORE', W/2, H - 30, {size:8, color:'rgba(232,232,245,0.5)'});
   drawText('v'+GAME_VERSION, W/2, H - 12, {size:7, color:'rgba(255,140,60,0.5)'});
 }
 
