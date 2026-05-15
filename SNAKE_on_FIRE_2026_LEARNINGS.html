@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>SNAKE_on_FIRE_2026 Learnings</title>
+<style>
+body{
+    background:#07111f;
+    color:#f3f4f6;
+    font-family:Arial,sans-serif;
+    margin:0;
+    padding:40px;
+}
+h1,h2{
+    color:#60a5fa;
+}
+.card{
+    background:#111827;
+    border-radius:18px;
+    padding:24px;
+    margin-bottom:24px;
+    box-shadow:0 0 20px rgba(0,0,0,0.25);
+}
+.code{
+    background:#0b1020;
+    padding:14px;
+    border-radius:10px;
+    overflow-x:auto;
+    font-family:monospace;
+    margin-top:10px;
+}
+.flow{
+    text-align:center;
+    font-size:22px;
+    line-height:2;
+    font-weight:bold;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+th,td{
+    padding:14px;
+    border-bottom:1px solid #243041;
+}
+th{
+    background:#2563eb;
+}
+.highlight{
+    color:#34d399;
+    font-weight:bold;
+}
+</style>
+</head>
+<body>
+
+<h1>SNAKE_on_FIRE_2026 — Deployment & Firebase Learnings</h1>
+
+<div class="card">
+<h2>Finale Infrastruktur</h2>
+<table>
+<tr><th>Bereich</th><th>Tool</th><th>Rolle</th></tr>
+<tr><td>Versionskontrolle</td><td>Git</td><td>Lokale Versionsverwaltung</td></tr>
+<tr><td>Repository</td><td>GitHub</td><td>Cloud-Backup & Sync</td></tr>
+<tr><td>Hosting</td><td>Netlify</td><td>Öffentlich spielbarer Link</td></tr>
+<tr><td>Datenbank</td><td>Firebase Realtime Database</td><td>Globale Highscores</td></tr>
+<tr><td>Entwicklung</td><td>macOS Terminal</td><td>Deployment & Verwaltung</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>Wichtigste Git-Befehle</h2>
+
+<div class="code">
+git add .<br>
+git commit -m "update"<br>
+git push
+</div>
+
+<p>Dieser Workflow updated:</p>
+<ul>
+<li>GitHub</li>
+<li>Netlify</li>
+<li>Live-Spiel</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>Git Reset Workflow</h2>
+
+<div class="code">
+rm -rf .git
+</div>
+
+<p>Löscht nur:</p>
+<ul>
+<li>Git-Historie</li>
+<li>Branches</li>
+<li>alte Konfiguration</li>
+</ul>
+
+<p class="highlight">NICHT den Spielcode.</p>
+</div>
+
+<div class="card">
+<h2>Firebase Setup</h2>
+
+<div class="code">
+sudo npm install -g firebase-tools
+</div>
+
+<div class="code">
+firebase login
+</div>
+
+<div class="code">
+firebase init database
+</div>
+
+<div class="code">
+firebase deploy --only database
+</div>
+
+<p>Ergebnis:</p>
+<ul>
+<li>globale Highscores</li>
+<li>persistente Speicherung</li>
+<li>Live-Datenbank</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>Architektur</h2>
+
+<div class="flow">
+LOKALER CODE<br>
+↓<br>
+GIT<br>
+↓<br>
+GITHUB<br>
+↓<br>
+NETLIFY<br>
+↓<br>
+LIVE GAME<br>
+↓<br>
+FIREBASE HIGHSCORES
+</div>
+
+</div>
+
+<div class="card">
+<h2>Privacy Setup</h2>
+
+<div class="code">
+git config --global user.name "wellengtown265"
+</div>
+
+<div class="code">
+git config --global user.email "284475823+wellengtown265@users.noreply.github.com"
+</div>
+
+<p>Dadurch erscheinen:</p>
+<ul>
+<li>kein echter Name</li>
+<li>keine private Mail</li>
+<li>nur GitHub No-Reply-Adresse</li>
+</ul>
+</div>
+
+<div class="card">
+<h2>Finaler Status</h2>
+
+<p><strong>Live Game:</strong><br>
+https://snake-on-fire-v1-3.netlify.app/</p>
+
+<p><strong>GitHub:</strong><br>
+https://github.com/wellengtown265/GAMES_and_FUN</p>
+
+<p><strong>Features:</strong></p>
+
+<ul>
+<li>öffentlicher Spiel-Link</li>
+<li>globale Highscores</li>
+<li>automatische Deployments</li>
+<li>saubere GitHub-Identität</li>
+<li>reproduzierbarer Workflow</li>
+</ul>
+</div>
+
+</body>
+</html>

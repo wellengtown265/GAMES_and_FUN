@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Security Analyse — SNAKE_on_FIRE_2026</title>
+<style>
+body{
+    background:#071018;
+    color:#f3f4f6;
+    font-family:Arial,sans-serif;
+    margin:0;
+    padding:40px;
+}
+h1,h2{
+    color:#60a5fa;
+}
+.card{
+    background:#111827;
+    padding:24px;
+    margin-bottom:24px;
+    border-radius:18px;
+    box-shadow:0 0 20px rgba(0,0,0,0.3);
+}
+.code{
+    background:#0b1220;
+    padding:14px;
+    border-radius:10px;
+    font-family:monospace;
+    overflow-x:auto;
+    margin-top:12px;
+}
+table{
+    width:100%;
+    border-collapse:collapse;
+}
+th,td{
+    border-bottom:1px solid #243041;
+    padding:14px;
+}
+th{
+    background:#2563eb;
+}
+.low{color:#34d399;font-weight:bold;}
+.medium{color:#fbbf24;font-weight:bold;}
+.high{color:#f87171;font-weight:bold;}
+.flow{
+    text-align:center;
+    font-size:22px;
+    line-height:2;
+    font-weight:bold;
+}
+</style>
+</head>
+<body>
+
+<h1>Security Analyse — SNAKE_on_FIRE_2026</h1>
+
+<div class="card">
+<h2>Systemarchitektur</h2>
+
+<div class="flow">
+LOKALER MAC<br>
+↓<br>
+GIT<br>
+↓<br>
+GITHUB<br>
+↓<br>
+NETLIFY<br>
+↓<br>
+LIVE GAME<br>
+↓<br>
+FIREBASE
+</div>
+</div>
+
+<div class="card">
+<h2>Risiken für das Game</h2>
+
+<table>
+<tr><th>Risiko</th><th>Bewertung</th><th>Beschreibung</th></tr>
+<tr><td>Fake Highscores</td><td class="medium">MITTEL</td><td>Firebase läuft im Testmodus</td></tr>
+<tr><td>Code-Kopien</td><td class="low">NIEDRIG</td><td>Browsergames sind öffentlich sichtbar</td></tr>
+<tr><td>GitHub-Account-Kompromittierung</td><td class="medium">MITTEL</td><td>Bei schwachen Passwörtern oder fehlender 2FA</td></tr>
+</table>
+</div>
+
+<div class="card">
+<h2>Privacy-Risiken</h2>
+
+<ul>
+<li>versehentliche Uploads über <code>git add .</code></li>
+<li>API-Keys im Repository</li>
+<li>Screenshots mit privaten Informationen</li>
+<li>Terminal-Ausgaben mit Pfaden oder Namen</li>
+</ul>
+
+<div class="code">
+.gitignore
+.env
+tokens
+private
+passwords
+</div>
+
+<p>Diese Dateien oder Ordner sollten niemals committed werden.</p>
+</div>
+
+<div class="card">
+<h2>Lokale Risiken</h2>
+
+<table>
+<tr><th>Bereich</th><th>Risiko</th></tr>
+<tr><td>Unbekannte npm-Pakete</td><td class="high">HOCH</td></tr>
+<tr><td>Gefährliche Terminalbefehle</td><td class="high">HOCH</td></tr>
+<tr><td>Browser Extensions</td><td class="medium">MITTEL</td></tr>
+</table>
+
+</div>
+
+<div class="card">
+<h2>Wichtige Sicherheitsmaßnahmen</h2>
+
+<ul>
+<li>GitHub 2FA aktivieren</li>
+<li>No-Reply-Mail verwenden</li>
+<li>nur vertrauenswürdige npm-Pakete installieren</li>
+<li>keine sensiblen Daten committen</li>
+<li>wenige Browser Extensions nutzen</li>
+</ul>
+
+</div>
+
+<div class="card">
+<h2>Bereits korrekt umgesetzt</h2>
+
+<ul>
+<li>anonymisierte GitHub-Identität</li>
+<li>cleanes neues Repository</li>
+<li>Netlify statt eigener Server</li>
+<li>HTTPS Hosting</li>
+<li>kleine Angriffsfläche</li>
+</ul>
+
+</div>
+
+<div class="card">
+<h2>Gesamtbewertung</h2>
+
+<p>
+Die aktuelle Infrastruktur ist für kleine öffentliche Browsergames:
+</p>
+
+<ul>
+<li>modern</li>
+<li>relativ sicher</li>
+<li>einfach wartbar</li>
+<li>privacy-orientiert</li>
+<li>gut reproduzierbar</li>
+</ul>
+
+<p>
+Die größte reale Gefahr aktuell sind versehentliche Datenleaks — nicht externe Hacker.
+</p>
+
+</div>
+
+</body>
+</html>
